@@ -9,12 +9,14 @@ enum APIError: LocalizedError {
     case badStatus(Int)
     case badURL
     case noInput
+    case unsupportedFormat(String)
 
     var errorDescription: String? {
         switch self {
         case .badStatus(let code): "Server returned \(code)"
         case .badURL:              "Bad server address"
         case .noInput:             "Need a photo or a hint first"
+        case .unsupportedFormat(let what): "The server sent \(what)"
         }
     }
 }
@@ -97,21 +99,50 @@ struct APIClient {
         return try decoder.decode(JobStatus.self, from: data)
     }
 
-    /// Downloads the model to the temp dir, keeping whatever USD flavour the
-    /// server sent. The extension matters — RealityKit dispatches on it and
-    /// refuses a file that does not end in .usda / .usdc / .usdz.
+    /// Fetches the model named by `model_path`.
+    ///
+    /// That path may be relative to the loop server, or a fully-qualified URL
+    /// somewhere else entirely — cloud storage, a CDN, a signed link. Both
+    /// work: an absolute string ignores the base.
+    ///
+    /// The file is saved with a USD extension because RealityKit dispatches on
+    /// it. We do not trust the URL to carry one — signed links often end in a
+    /// query string, and object keys frequently have no extension at all — so
+    /// the format is sniffed from the bytes, which cannot lie.
     func downloadModel(path: String, job: String, iteration: Int) async throws -> URL {
         guard let url = URL(string: path, relativeTo: Config.baseURL) else { throw APIError.badURL }
+
         let (temp, response) = try await session.download(from: url)
         try check(response)
 
-        let known = ["usda", "usdc", "usdz"]
-        let suffix = known.contains(url.pathExtension) ? url.pathExtension : "usdz"
+        let suffix = try Self.usdExtension(of: temp, urlHint: url.pathExtension)
         let dest = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(job)-\(iteration).\(suffix)")
         try? FileManager.default.removeItem(at: dest)
         try FileManager.default.moveItem(at: temp, to: dest)
         return dest
+    }
+
+    /// Identifies the USD flavour from the file's leading bytes.
+    static func usdExtension(of file: URL, urlHint: String) throws -> String {
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        let head = try handle.read(upToCount: 8) ?? Data()
+
+        if head.starts(with: Data("#usda".utf8))    { return "usda" }
+        if head.starts(with: Data("PXR-USDC".utf8)) { return "usdc" }
+        if head.starts(with: Data([0x50, 0x4B]))    { return "usdz" }   // zip
+
+        // Nothing recognisable. If the URL claimed a USD extension, take its
+        // word; otherwise say plainly what arrived, because the usual cause is
+        // a glTF or OBJ from the other half of the pipeline.
+        if ["usda", "usdc", "usdz"].contains(urlHint) { return urlHint }
+
+        let sniff = String(decoding: head.prefix(4), as: UTF8.self)
+        if sniff == "glTF" || urlHint == "glb" || urlHint == "gltf" {
+            throw APIError.unsupportedFormat("glTF — the viewer needs USD (.usda, .usdc or .usdz)")
+        }
+        throw APIError.unsupportedFormat(urlHint.isEmpty ? "an unrecognised file" : ".\(urlHint)")
     }
 
     private func check(_ response: URLResponse) throws {

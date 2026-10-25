@@ -56,7 +56,7 @@ iOS side needs no changes.
                      kind is "scene" (orbit video) or "object" (single photo)
                      -> {"job_id": "..."}
     GET  /status/<job>        -> JobStatus
-    GET  /model/<job>/<n>.usdz
+    GET  /model/<job>/<n>.usda
 
 JobStatus:
 
@@ -84,3 +84,28 @@ Replacing that one file with Argon's output is the whole remaining job. Argon
 emits a `.usda`; `usd_render` renders eight turntable frames and a
 `metrics.json` of measured facts (mesh count, vertex count, bounds); Argon
 reads those next to the reference frames and rewrites the `.usda`.
+
+
+## 6. Models hosted elsewhere
+
+`model_path` may be a path on the loop server **or a fully-qualified URL** —
+cloud storage, a CDN, a signed link. The app takes either; an absolute string
+ignores the base address.
+
+Two things the host must get right:
+
+**HTTPS.** App Transport Security blocks plain HTTP to a public host. Cloud
+storage is https by default, so this is only a problem for a hand-rolled host.
+
+**USD.** The viewer needs `.usda`, `.usdc` or `.usdz`. It does **not** load
+glTF, GLB or OBJ. The app identifies the format from the file's leading bytes
+rather than the URL, because signed links end in a query string and object
+keys often carry no extension at all. A glTF gets a plain error naming what
+arrived instead of failing silently.
+
+To exercise that path before the real backend exists, point the mock at any
+static host:
+
+    MODEL_BASE_URL=https://storage.googleapis.com/your-bucket python3 mock_server.py
+
+`model_path` then comes back absolute, and the app fetches from there.

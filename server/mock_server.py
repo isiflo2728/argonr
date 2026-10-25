@@ -14,7 +14,7 @@ Contract (matches Models.swift):
     GET  /status/<job>                                              -> JobStatus
     GET  /model/<job>/<n>.usdz                                      -> binary
 """
-import email, json, shutil, subprocess, sys, threading, time, uuid
+import email, json, os, shutil, subprocess, sys, threading, time, uuid
 from email.policy import default as email_policy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -23,6 +23,17 @@ ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "runs"
 FIXTURES = ROOT / "fixtures"
 RENDERER = ROOT / "tools" / "usd_render"   # optional; only the loop needs it
+
+# Set this to hand back absolute model URLs instead of paths on this server —
+# which is what happens once models live in cloud storage. Lets the app's
+# remote-URL path be exercised before the real backend is ready.
+#   MODEL_BASE_URL=https://storage.googleapis.com/your-bucket python3 mock_server.py
+MODEL_BASE_URL = os.environ.get("MODEL_BASE_URL", "").rstrip("/")
+
+
+def model_url(job, index):
+    leaf = f"{job}/{index}.usda"
+    return f"{MODEL_BASE_URL}/{leaf}" if MODEL_BASE_URL else f"/model/{leaf}"
 
 FIRST_PASS = 3          # iterations produced by /generate
 MAX_VARIANT = 5         # blender_build.py knows variants 0..5
@@ -132,7 +143,7 @@ def worker(job):
                 "match_score": round(min(0.42 + 0.09 * index, 0.95), 2)
                                if JOBS[job]["has_reference"] else None,
                 "object_count": min(1 + index, 4) if JOBS[job]["kind"] == "scene" else None,
-                "model_path": f"/model/{job}/{index}.usda" if path else None,
+                "model_path": model_url(job, index) if path else None,
                 "headline": HEADLINES[min(index, len(HEADLINES) - 1)],
                 "defects": DEFECTS[index:index + 2],
             })
