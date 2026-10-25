@@ -28,6 +28,7 @@ wheel for Intel macOS on Python 3.14, and building from source needs OpenSSL.
 | Method | Path | What it does |
 |---|---|---|
 | `POST` | `/model3d` | `{"prompt": "...", "format": "glb" \| "obj" \| "stl"}` → generates a model, saves it, uploads it, returns its URL |
+| `POST` | `/model3d/refine` | Multipart `model` + `image` (+ optional `note`) → improves a model so it fits the AR scene in the photo |
 | `GET` | `/models` | Every generated model, newest first, with prompt and public URL |
 | `GET` | `/viewer` | three.js viewer: browse, rotate and generate models |
 | `POST` | `/completion` | `{"prompt": "..."}` → plain Argon text completion |
@@ -47,6 +48,44 @@ wheel for Intel macOS on Python 3.14, and building from source needs OpenSSL.
 ```
 
 Generation takes roughly 40–90 seconds.
+
+## Refining from an AR photo
+
+Place a generated model in AR, take a screenshot, and send it back:
+
+    curl -X POST $URL/model3d/refine \
+      -F model=20261025-195504-a-blue-ceramic-teapot-e90a5a.glb \
+      -F image=@screenshot.jpg \
+      -F note="it looks too small"
+
+Argon looks at the model against its surroundings and returns a plan: how big
+the model **appears** and how big it **should** appear (both judged from the
+photo), plus edits to parts — recolor, resize, move, remove, add. The server
+applies it and saves a new version linked to its `parent`; refine that one with
+another screenshot to keep improving. Takes ~15 seconds.
+
+```json
+{
+  "url": "https://storage.googleapis.com/.../20261025-131801-a-blue-ceramic-teapot-refined-95a872.glb",
+  "parent": "20261025-195504-a-blue-ceramic-teapot-e90a5a.glb",
+  "assessment": "The teapot appears miniature next to the coffee mug, measuring only about 4.5 cm across...",
+  "changes": ["Scaled the teapot up ... to ~23 cm wide", "Matched the lid and knob color to the body"],
+  "scale": 5.11, "apparent_size_m": 0.045, "target_size_m": 0.23,
+  "size_m": [1.50, 0.89, 0.88]
+}
+```
+
+The scale is a **ratio** (`target / apparent`), because AR viewers often
+rescale models when placing them, so the file's own size says nothing about
+what the user saw. Two consequences:
+
+- If the viewer **auto-fits models to a fixed size** (argonr's app fits objects
+  to 0.3 m), rescaling the file changes nothing on screen. Use
+  `target_size_m` to set the display size in the app instead.
+- In a **true-scale** viewer, the new file size is what you'll see.
+
+Every model stores the `Scene` it was built from (`scenes/<name>.json` in the
+bucket) so it can be edited. Older GLBs without one are read back from the GLB.
 
 ## How models are built
 

@@ -15,6 +15,7 @@ from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
 
+from google.api_core.exceptions import NotFound
 from google.cloud import storage as gcs
 
 MAX_SIGNED_URL_SECONDS = 7 * 24 * 3600  # limit for V4 signed URLs
@@ -49,6 +50,27 @@ def _upload(path: Path, object_name: str, content_type: str, metadata: dict[str,
 async def upload(path: Path, object_name: str, content_type: str, metadata: dict[str, str]) -> str:
     """Upload a local file to the configured bucket and return a URL to download it."""
     return await asyncio.to_thread(_upload, path, object_name, content_type, metadata)
+
+
+def _download(object_name: str) -> bytes | None:
+    blob = _bucket().blob(object_name)
+    try:
+        return blob.download_as_bytes()
+    except NotFound:
+        return None
+
+
+async def download(object_name: str) -> bytes | None:
+    return await asyncio.to_thread(_download, object_name)
+
+
+def _metadata(object_name: str) -> dict[str, str]:
+    blob = _bucket().get_blob(object_name)
+    return (blob.metadata or {}) if blob else {}
+
+
+async def metadata(object_name: str) -> dict[str, str]:
+    return await asyncio.to_thread(_metadata, object_name)
 
 
 def _list_models(prefix: str) -> list[dict[str, str | int | None]]:

@@ -3,7 +3,7 @@ import json
 import os
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "outputs"))
@@ -13,7 +13,7 @@ MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 def _filename(prompt: str, extension: str) -> str:
     """Build a sortable, unique name like 20261025-104512-a-simple-table-1a2b3c.obj."""
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")  # UTC, same on every host
     slug = re.sub(r"[^a-z0-9]+", "-", prompt.lower()).strip("-")[:40].rstrip("-") or "output"
     return f"{timestamp}-{slug}-{uuid.uuid4().hex[:6]}.{extension}"
 
@@ -41,6 +41,31 @@ def _read_metadata(model: Path) -> dict:
 async def save_metadata(model: Path, metadata: dict) -> None:
     """Record details about a saved model (prompt, uploaded URL) for the viewer."""
     await asyncio.to_thread(_write, _metadata_path(model), json.dumps(metadata, indent=2))
+
+
+def _scene_path(model: Path) -> Path:
+    return model.with_name(model.name + ".scene.json")
+
+
+async def save_scene(model: Path, scene_json: str) -> Path:
+    """Keep the structured Scene a model was built from, so it can be refined later."""
+    path = _scene_path(model)
+    await asyncio.to_thread(_write, path, scene_json)
+    return path
+
+
+def read_local(name: str) -> tuple[str | None, bytes | None]:
+    """A model's stored Scene JSON and file bytes from local disk, if present."""
+    model = MODELS_DIR / Path(name).name  # basename only: no path traversal
+    scene = _scene_path(model)
+    return (
+        scene.read_text() if scene.is_file() else None,
+        model.read_bytes() if model.is_file() else None,
+    )
+
+
+def read_metadata(name: str) -> dict:
+    return _read_metadata(MODELS_DIR / Path(name).name)
 
 
 def list_models() -> list[dict[str, str | int | None]]:
