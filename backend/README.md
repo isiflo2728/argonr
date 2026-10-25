@@ -85,6 +85,13 @@ Runs as the `argon-uploader` service account, so no key file is needed. The
 Gemini key comes from Secret Manager. With uploads on, `/models` lists the
 bucket rather than local disk, which Cloud Run wipes on every restart.
 
+    ./deploy.sh              # build, deploy, smoke test
+    SKIP_BUILD=1 ./deploy.sh # redeploy the last image, e.g. after changing settings
+
+It checks the prerequisites below first and prints the command to fix any
+that are missing. Settings (`PROJECT`, `BUCKET`, `MAX_INSTANCES`, ...) can be
+overridden from the environment. What it runs, if you'd rather do it by hand:
+
     P=printbot-f7f6d R=us-central1
     gcloud builds submit --project=$P --region=$R --tag $R-docker.pkg.dev/$P/argonr/backend:latest .
     gcloud run deploy argonr-backend --project=$P --region=$R \
