@@ -1,0 +1,7 @@
+{
+  "name": "skyhop-argon-lab",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  }
+}
