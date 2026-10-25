@@ -15,7 +15,6 @@
 
 import Foundation
 import Observation
-import UIKit
 
 @MainActor
 @Observable

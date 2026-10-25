@@ -13,7 +13,9 @@
 import SwiftUI
 
 struct ViewerScreen: View {
-    @Bindable var app: AppModel
+    var app: AppModel
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var arNote = ""
     @State private var showDefects = false
@@ -39,10 +41,13 @@ struct ViewerScreen: View {
             // tear down the session and cost the user their floor every pass.
             if app.isWorking { workingOverlay }
         }
-        .animation(.snappy, value: app.selected)
-        .animation(.snappy, value: app.isWorking)
-        .animation(.snappy, value: showDefects)
+        .animation(motion, value: app.selected)
+        .animation(motion, value: app.isWorking)
+        .animation(motion, value: showDefects)
     }
+
+    /// Honour Reduce Motion — SwiftUI leaves custom animations running.
+    private var motion: Animation? { reduceMotion ? nil : .snappy }
 
     // MARK: - Top
 
@@ -83,15 +88,12 @@ struct ViewerScreen: View {
     }
 
     private var closeButton: some View {
-        Button {
-            app.startOver()
-        } label: {
-            Image(systemName: "xmark")
-                .font(.footnote.weight(.semibold))
-                .frame(width: 44, height: 44)
-                .background(.ultraThinMaterial, in: .circle)
-        }
-        .accessibilityLabel("Start over")
+        Button("Start over", systemImage: "xmark", action: app.startOver)
+            .labelStyle(.iconOnly)
+            .font(.footnote.weight(.semibold))
+            .frame(width: 44, height: 44)
+            .background(.ultraThinMaterial, in: .circle)
+            .buttonStyle(.plain)
     }
 
     // MARK: - Defects
@@ -105,8 +107,10 @@ struct ViewerScreen: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(Array(defects.enumerated()), id: \.element.id) { position, defect in
-                    if position > 0 { Divider().padding(.vertical, 12) }
+                ForEach(defects) { defect in
+                    if defect.id != defects.first?.id {
+                        Divider().padding(.vertical, 12)
+                    }
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 8) {
                             Text(defect.rubric)
@@ -165,15 +169,14 @@ struct ViewerScreen: View {
                     }
                 }
 
-                Button {
-                    showDefects.toggle()
-                } label: {
-                    Image(systemName: showDefects ? "list.bullet.circle.fill" : "list.bullet.circle")
-                        .font(.title3)
-                        .frame(width: 44, height: 44)
-                        .background(.ultraThinMaterial, in: .circle)
-                }
-                .accessibilityLabel(showDefects ? "Hide defects" : "Show defects")
+                Button(showDefects ? "Hide defects" : "Show defects",
+                       systemImage: showDefects ? "list.bullet.circle.fill" : "list.bullet.circle",
+                       action: toggleDefects)
+                    .labelStyle(.iconOnly)
+                    .font(.title3)
+                    .frame(width: 44, height: 44)
+                    .background(.ultraThinMaterial, in: .circle)
+                    .buttonStyle(.plain)
             }
 
             promptBar
@@ -196,21 +199,24 @@ struct ViewerScreen: View {
                 .background(.ultraThinMaterial, in: .capsule)
                 .accessibilityLabel("What should change")
 
-            Button(action: send) {
-                Image(systemName: "arrow.up")
-                    .font(.headline)
-                    .frame(width: 44, height: 44)
-                    .background(canSend ? AnyShapeStyle(.tint) : AnyShapeStyle(.ultraThinMaterial),
-                                in: .circle)
-                    .foregroundStyle(canSend ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
-            }
-            .disabled(!canSend)
-            .accessibilityLabel("Send this change")
+            Button("Send this change", systemImage: "arrow.up", action: send)
+                .labelStyle(.iconOnly)
+                .font(.headline)
+                .frame(width: 44, height: 44)
+                .background(canSend ? AnyShapeStyle(.tint) : AnyShapeStyle(.ultraThinMaterial),
+                            in: .circle)
+                .foregroundStyle(canSend ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+                .buttonStyle(.plain)
+                .disabled(!canSend)
         }
     }
 
     private var canSend: Bool {
         app.canIterate && !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func toggleDefects() {
+        showDefects.toggle()
     }
 
     private func send() {
