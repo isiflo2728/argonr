@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Model Viewer</title>
+  <style>
+    :root {
+      --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66;
+      --border: #e2e2dc; --accent: #3a6df0; --accent-text: #ffffff;
+      --selected: #eaf0fe; --error: #c0392b; --viewport: #ecece8;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161615; --panel: #1f1f1d; --text: #ececea; --muted: #9a9a94;
+        --border: #33332f; --accent: #6b93ff; --accent-text: #0b0b0a;
+        --selected: #23304f; --error: #ff7b6b; --viewport: #121211;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font: 14px/1.4 system-ui, -apple-system, sans-serif;
+      background: var(--bg); color: var(--text);
+      display: grid; grid-template-columns: 300px 1fr; height: 100vh;
+    }
+    aside {
+      background: var(--panel); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; min-height: 0;
+    }
+    header { padding: 16px; border-bottom: 1px solid var(--border); }
+    h1 { font-size: 16px; margin: 0 0 12px; }
+    form { display: flex; flex-direction: column; gap: 8px; }
+    textarea, select, button {
+      font: inherit; color: inherit; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 6px; padding: 8px;
+    }
+    textarea { resize: vertical; min-height: 60px; }
+    .row { display: flex; gap: 8px; }
+    .row select { flex: 0 0 80px; }
+    .row button { flex: 1; }
+    button.primary {
+      background: var(--accent); color: var(--accent-text); border-color: var(--accent);
+      font-weight: 600; cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: progress; }
+    #status { font-size: 12px; color: var(--muted); min-height: 1.4em; }
+    #status.error { color: var(--error); }
+    #status a { color: var(--accent); }
+    #list { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 1; }
+    #list li {
+      padding: 8px 10px; border-radius: 6px; cursor: pointer;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    #list li:hover { background: var(--bg); }
+    #list li.selected { background: var(--selected); }
+    .name { font-weight: 500; overflow-wrap: anywhere; }
+    .meta { font-size: 12px; color: var(--muted); }
+    .empty { color: var(--muted); padding: 16px; }
+    main { position: relative; min-width: 0; background: var(--viewport); }
+    canvas { display: block; width: 100%; height: 100%; }
+    #toolbar {
+      position: absolute; top: 12px; right: 12px; display: flex; gap: 8px;
+    }
+    #toolbar button { background: var(--panel); cursor: pointer; }
+    #info {
+      position: absolute; left: 12px; bottom: 12px; font-size: 12px; color: var(--muted);
+      background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
+    }
+    #info:empty { display: none; }
+    #info { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; max-width: calc(100% - 24px); }
+    #info .url { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    #info a { color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 420px; }
+    #info button { font-size: 12px; padding: 2px 8px; cursor: pointer; background: var(--bg); }
+    .cloud { color: var(--accent); }
+    @media (max-width: 700px) {
+      body { grid-template-columns: 1fr; grid-template-rows: auto 55vh; height: auto; }
+      aside { border-right: 0; border-bottom: 1px solid var(--border); max-height: 50vh; }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <aside>
+    <header>
+      <h1>Generated models</h1>
+      <form id="generate">
+        <textarea id="prompt" placeholder="Describe a model to generate…" required></textarea>
+        <div class="row">
+          <select id="format" aria-label="Format">
+            <option value="glb">GLB</option>
+            <option value="obj">OBJ</option>
+            <option value="stl">STL</option>
+          </select>
+          <button class="primary" type="submit">Generate</button>
+        </div>
+        <div id="status"></div>
+      </form>
+    </header>
+    <ul id="list"></ul>
+  </aside>
+  <main>
+    <div id="toolbar">
+      <button id="wireframe" type="button">Wireframe</button>
+      <button id="reset" type="button">Reset view</button>
+    </div>
+    <div id="info"></div>
+  </main>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+    import { STLLoader } from "three/addons/loaders/STLLoader.js";
+
+    const main = document.querySelector("main");
+    const list = document.getElementById("list");
+    const info = document.getElementById("info");
+    const status = document.getElementById("status");
+
+    // --- Scene setup ---
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    main.prepend(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+    sun.position.set(3, 5, 4);
+    scene.add(sun);
+
+    const grid = new THREE.GridHelper(10, 20, 0x888888, 0x888888);
+    grid.material.opacity = 0.25;
+    grid.material.transparent = true;
+    scene.add(grid);
+
+    // Used for files without their own colors (STL, and older OBJ files).
+    function defaultMaterial(vertexColors = false) {
+      return new THREE.MeshStandardMaterial({
+        color: vertexColors ? 0xffffff : 0x8fa8d8, vertexColors, roughness: 0.6, metalness: 0.05,
+        flatShading: true, side: THREE.DoubleSide, // generated meshes may have inconsistent winding
+      });
+    }
+
+    let current = null;
+    let wireframe = false;
+
+    function eachMaterial(object, fn) {
+      object.traverse((child) => {
+        if (child.isMesh) [].concat(child.material).forEach(fn);
+      });
+    }
+
+    function resize() {
+      const { clientWidth: w, clientHeight: h } = main;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    new ResizeObserver(resize).observe(main);
+
+    renderer.setAnimationLoop(() => {
+      controls.update();
+      renderer.render(scene, camera);
+    });
+
+    // --- Loading models ---
+    async function toObject(res, format) {
+      if (format === "glb") {
+        const gltf = await new GLTFLoader().parseAsync(await res.arrayBuffer(), "");
+        eachMaterial(gltf.scene, (m) => { m.flatShading = true; m.needsUpdate = true; });
+        return gltf.scene;
+      }
+      const text = await res.text();
+      if (format === "stl") {
+        const mesh = new THREE.Mesh(new STLLoader().parse(text), defaultMaterial());
+        mesh.rotation.x = -Math.PI / 2; // STL is Z-up; the scene is Y-up
+        return mesh;
+      }
+      const group = new OBJLoader().parse(text);
+      group.traverse((child) => {
+        if (child.isMesh) {
+          child.geometry.computeVertexNormals();
+          child.material = defaultMaterial("color" in child.geometry.attributes);
+        }
+      });
+      return group;
+    }
+
+    function frame(object) {
+      // Sit the model on the grid, centered, and point the camera at it.
+      const box = new THREE.Box3().setFromObject(object);
+      const center = box.getCenter(new THREE.Vector3());
+      object.position.x -= center.x;
+      object.position.z -= center.z;
+      object.position.y -= box.min.y;
+
+      const size = box.getSize(new THREE.Vector3());
+      const radius = Math.max(size.x, size.y, size.z) || 1;
+      grid.scale.setScalar(radius / 2);
+      controls.target.set(0, size.y / 2, 0);
+      camera.position.set(radius * 1.4, radius * 1.1, radius * 1.8);
+      camera.near = radius / 100;
+      camera.far = radius * 100;
+      camera.updateProjectionMatrix();
+      controls.update();
+    }
+
+    async function show(model, item) {
+      list.querySelectorAll("li").forEach((li) => li.classList.toggle("selected", li === item));
+      info.textContent = "Loading…";
+      try {
+        const res = await fetch(model.url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const object = await toObject(res, model.format);
+        eachMaterial(object, (m) => { m.wireframe = wireframe; });
+        if (current) scene.remove(current);
+        current = object;
+        scene.add(object);
+        frame(object);
+
+        let triangles = 0;
+        object.traverse((c) => {
+          if (c.isMesh) triangles += (c.geometry.index ?? c.geometry.attributes.position).count / 3;
+        });
+        renderInfo(model, triangles);
+      } catch (err) {
+        info.textContent = `Could not load ${model.name}: ${err.message}`;
+      }
+    }
+
+    function renderInfo(model, triangles) {
+      const summary = document.createElement("span");
+      summary.textContent = `${model.name} · ${triangles} triangles`;
+      info.replaceChildren(summary);
+      if (!model.public_url) {
+        const note = document.createElement("span");
+        note.textContent = "· not uploaded";
+        info.append(note);
+        return;
+      }
+      const wrap = document.createElement("span");
+      wrap.className = "url";
+      const link = document.createElement("a");
+      link.href = model.public_url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = model.public_url;
+      link.title = model.public_url;
+      const copy = document.createElement("button");
+      copy.type = "button";
+      copy.textContent = "Copy URL";
+      copy.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(model.public_url);
+          copy.textContent = "Copied";
+        } catch {
+          copy.textContent = "Copy failed";
+        }
+        setTimeout(() => { copy.textContent = "Copy URL"; }, 1500);
+      });
+      wrap.append(link, copy);
+      info.append(wrap);
+    }
+
+    // --- Model list ---
+    function label(name) {
+      // 20261025-113749-a-small-chair-65230a.obj -> "a small chair"
+      const stem = name.replace(/\.\w+$/, "");
+      const parts = stem.split("-");
+      return parts.slice(2, -1).join(" ") || stem;
+    }
+
+    async function refresh(selectName) {
+      const models = await (await fetch("/models")).json();
+      list.replaceChildren();
+      if (!models.length) {
+        list.innerHTML = '<li class="empty">No models yet. Generate one above.</li>';
+        return;
+      }
+      let toSelect = null;
+      for (const model of models) {
+        const li = document.createElement("li");
+        const name = document.createElement("span");
+        name.className = "name";
+        name.textContent = model.prompt || label(model.name);
+        const meta = document.createElement("span");
+        meta.className = "meta";
+        meta.textContent = `${model.format.toUpperCase()} · ${(model.size / 1024).toFixed(1)} KB · ${model.created.replace("T", " ")}`;
+        if (model.public_url) {
+          const cloud = document.createElement("span");
+          cloud.className = "cloud";
+          cloud.textContent = " · uploaded";
+          meta.append(cloud);
+        }
+        li.append(name, meta);
+        li.addEventListener("click", () => show(model, li));
+        list.append(li);
+        if (model.name === selectName || (!selectName && !toSelect)) toSelect = [model, li];
+      }
+      if (toSelect) show(...toSelect);
+    }
+
+    // --- Toolbar ---
+    document.getElementById("wireframe").addEventListener("click", (e) => {
+      wireframe = !wireframe;
+      if (current) eachMaterial(current, (m) => { m.wireframe = wireframe; });
+      e.target.textContent = wireframe ? "Solid" : "Wireframe";
+    });
+    document.getElementById("reset").addEventListener("click", () => {
+      if (current) {
+        current.position.set(0, 0, 0);
+        frame(current);
+      }
+    });
+
+    // --- Generate form ---
+    document.getElementById("generate").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const button = e.target.querySelector("button");
+      const prompt = document.getElementById("prompt").value.trim();
+      const format = document.getElementById("format").value;
+      button.disabled = true;
+      status.className = "";
+      status.textContent = "Generating… this can take up to a minute or two.";
+      try {
+        const res = await fetch("/model3d", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, format }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          const detail = typeof body.detail === "string" ? body.detail : `HTTP ${res.status}`;
+          throw new Error(detail);
+        }
+        const result = await res.json();
+        status.replaceChildren("Done. ");
+        const link = document.createElement("a");
+        link.href = result.url;
+        link.target = "_blank";
+        link.textContent = result.storage === "gcs" ? "Cloud Storage link" : "Download link";
+        status.append(link);
+        await refresh(result.filename);
+      } catch (err) {
+        status.className = "error";
+        status.textContent = err.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    refresh();
+  </script>
+</body>
+</html>
