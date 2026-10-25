@@ -4,15 +4,16 @@ Phone is the viewer. Laptop runs the loop. They talk over the local network.
 
 ## 0. Dependencies
 
-    brew install --cask blender     # generates the models
-    brew install ffmpeg             # extracts reference frames from the clip
+    brew install ffmpeg      # extracts reference frames from the capture
+
+That is the only one. There is no modeller in the pipeline: Argon emits USD
+ASCII (.usda) directly, and the turntable renderer is 90 lines of Swift against
+SceneKit, which ships with macOS.
+
+    cd server/tools && swiftc -O usd_render.swift -o usd_render
 
 Needed for the real pipeline, not just the mock. Until it's there, models come
 back `null` and the AR view stays empty.
-
-**To test AR before the install finishes:** drop any `.usdz` into
-`server/fixtures/` (Apple's AR Quick Look gallery has free ones). The mock
-server falls back to those automatically.
 
 ## 1. Start the server
 
@@ -75,7 +76,11 @@ coupling between the halves — change both together or neither.
 
 ## 5. Next
 
-`blender_build.py` is the stand-in for the script Argon writes. Variants 0–5
-are deliberately broken then progressively fixed, so the history strip has
-something real to show before the loop exists. Replacing that file with
-Argon's output is the whole remaining job.
+`usda_build.py` is the stand-in for what Argon writes. Variants 0-5 start
+wrong — oversized, geometry floating free, normals inverted — and get
+corrected, so the version strip has something real before the loop exists.
+
+Replacing that one file with Argon's output is the whole remaining job. Argon
+emits a `.usda`; `usd_render` renders eight turntable frames and a
+`metrics.json` of measured facts (mesh count, vertex count, bounds); Argon
+reads those next to the reference frames and rewrites the `.usda`.

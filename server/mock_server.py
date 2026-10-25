@@ -14,7 +14,7 @@ Contract (matches Models.swift):
     GET  /status/<job>                                              -> JobStatus
     GET  /model/<job>/<n>.usdz                                      -> binary
 """
-import email, json, shutil, subprocess, threading, time, uuid
+import email, json, shutil, subprocess, sys, threading, time, uuid
 from email.policy import default as email_policy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "runs"
 FIXTURES = ROOT / "fixtures"
-BLENDER = shutil.which("blender") or "/Applications/Blender.app/Contents/MacOS/Blender"
+RENDERER = ROOT / "tools" / "usd_render"   # optional; only the loop needs it
 
 FIRST_PASS = 3          # iterations produced by /generate
 MAX_VARIANT = 5         # blender_build.py knows variants 0..5
@@ -82,25 +82,28 @@ def extract_frames(job, count=8):
 
 
 def build_model(job, index):
-    dest = OUT / job / f"{index}.usdz"
+    """Writes the scene as USD ASCII. No modeller involved — Argon emits this
+    text directly, and RealityKit loads it on the phone as-is."""
+    dest = OUT / job / f"{index}.usda"
     dest.parent.mkdir(parents=True, exist_ok=True)
     variant = min(index, MAX_VARIANT)
-    if Path(BLENDER).exists():
+    try:
+        subprocess.run([sys.executable, str(ROOT / "usda_build.py"), str(dest), str(variant)],
+                       check=True, capture_output=True, timeout=60)
+    except Exception as exc:
+        print(f"[mock] usda_build failed: {exc}")
+        return None
+
+    # The loop's eyes: render turntable frames with Apple's own USD loader, so
+    # what the critique sees matches what the phone will show.
+    if RENDERER.exists():
+        views = OUT / job / f"views{index}"
         try:
-            subprocess.run(
-                [BLENDER, "--background", "--python", str(ROOT / "blender_build.py"),
-                 "--", str(dest), str(variant)],
-                check=True, capture_output=True, timeout=180)
-            if dest.exists():
-                return dest
+            subprocess.run([str(RENDERER), str(dest), str(views), "8", "700"],
+                           check=True, capture_output=True, timeout=120)
         except Exception as exc:
-            print(f"[mock] blender failed: {exc}")
-    pool = sorted(FIXTURES.glob("*.usdz"))
-    if pool:
-        shutil.copyfile(pool[index % len(pool)], dest)
-        return dest
-    print("[mock] no blender and no fixtures/*.usdz — models will 404")
-    return None
+            print(f"[mock] render failed: {exc}")
+    return dest
 
 
 def worker(job):
@@ -129,7 +132,7 @@ def worker(job):
                 "match_score": round(min(0.42 + 0.09 * index, 0.95), 2)
                                if JOBS[job]["has_reference"] else None,
                 "object_count": min(1 + index, 4) if JOBS[job]["kind"] == "scene" else None,
-                "model_path": f"/model/{job}/{index}.usdz" if path else None,
+                "model_path": f"/model/{job}/{index}.usda" if path else None,
                 "headline": HEADLINES[min(index, len(HEADLINES) - 1)],
                 "defects": DEFECTS[index:index + 2],
             })
@@ -235,7 +238,8 @@ class Handler(BaseHTTPRequestHandler):
             path = OUT / parts[1] / parts[2]
             if not path.exists():
                 return self._send(404, b'{"error":"not built yet"}')
-            return self._send(200, path.read_bytes(), "model/vnd.usdz+zip")
+            ctype = "model/vnd.usdz+zip" if path.suffix == ".usdz" else "text/plain"
+            return self._send(200, path.read_bytes(), ctype)
 
         self._send(404, b'{"error":"not found"}')
 
@@ -243,7 +247,6 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     FIXTURES.mkdir(exist_ok=True)
-    found = Path(BLENDER).exists()
-    print(f"[mock] blender: {BLENDER if found else 'NOT FOUND -> falling back to fixtures/'}")
+    print(f"[mock] renderer: {RENDERER if RENDERER.exists() else 'not built (models still work; the loop has no eyes)'}")
     print("[mock] listening on 0.0.0.0:8787")
     ThreadingHTTPServer(("0.0.0.0", 8787), Handler).serve_forever()

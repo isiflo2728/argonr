@@ -97,15 +97,18 @@ struct APIClient {
         return try decoder.decode(JobStatus.self, from: data)
     }
 
-    /// Downloads a .usdz to the temp dir. The extension matters — RealityKit
-    /// refuses to load a usdz without it.
+    /// Downloads the model to the temp dir, keeping whatever USD flavour the
+    /// server sent. The extension matters — RealityKit dispatches on it and
+    /// refuses a file that does not end in .usda / .usdc / .usdz.
     func downloadModel(path: String, job: String, iteration: Int) async throws -> URL {
         guard let url = URL(string: path, relativeTo: Config.baseURL) else { throw APIError.badURL }
         let (temp, response) = try await session.download(from: url)
         try check(response)
 
+        let known = ["usda", "usdc", "usdz"]
+        let suffix = known.contains(url.pathExtension) ? url.pathExtension : "usdz"
         let dest = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(job)-\(iteration).usdz")
+            .appendingPathComponent("\(job)-\(iteration).\(suffix)")
         try? FileManager.default.removeItem(at: dest)
         try FileManager.default.moveItem(at: temp, to: dest)
         return dest
