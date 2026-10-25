@@ -141,13 +141,14 @@ struct ViewerScreen: View {
     private var defectPanel: some View {
         let defects = app.selectedIteration?.defects ?? []
 
-        return VStack(alignment: .leading, spacing: 16) {
+        return VStack(alignment: .leading, spacing: 0) {
             if defects.isEmpty {
                 Text("No defects recorded for this version.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(defects) { defect in
+                ForEach(Array(defects.enumerated()), id: \.element.id) { position, defect in
+                    if position > 0 { Divider().padding(.vertical, 12) }
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 8) {
                             Text(defect.rubric)
@@ -257,16 +258,14 @@ struct ViewerScreen: View {
                     .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
                 Text(String(format: "%.2f", iteration.score))
-                    .font(.caption)
+                    .font(.caption.weight(.light))
                     .monospacedDigit()
-                    .foregroundStyle(isSelected ? AnyShapeStyle(.white.opacity(0.8))
-                                                : AnyShapeStyle(.secondary))
             }
             .frame(width: 56, height: 48)
             .background(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.ultraThinMaterial),
                         in: .rect(cornerRadius: 10))
             .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
-            .opacity(isReady ? 1 : 0.4)
+            .opacity(isReady ? 1 : 0.3)
         }
         .disabled(!isReady)
         .accessibilityLabel("Version \(iteration.index), score \(String(format: "%.2f", iteration.score))")
