@@ -16,6 +16,11 @@ xcuserdata/
 .swiftpm/
 .build/
 
+# Secrets — never commit. The repo is public.
+.env
+*.env
+!.env.example
+
 # Python
 __pycache__/
 *.pyc
