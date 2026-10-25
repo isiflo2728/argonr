@@ -47,6 +47,11 @@ final class AppModel {
     var isRefining = false
     /// The last frame sent, kept so the user can see what Argon was given.
     var lastShot: UIImage?
+    /// What the backend judged, and what it did about it. Worth showing —
+    /// the interesting part of a refinement is the reasoning, not the file.
+    var assessment: String?
+    var changes: [String] = []
+    var scaleNote: String?
     /// Identifies the model being refined, and what it was asked to be.
     private var currentFilename = ""
     private var currentPrompt = ""
@@ -83,6 +88,7 @@ final class AppModel {
                 subtitle = built.summary
                 currentFilename = built.filename
                 currentPrompt = asked
+                clearAssessment()
                 try await show(path: built.url, name: built.filename)
                 prompt = ""
                 await refreshLibrary()
@@ -128,6 +134,7 @@ final class AppModel {
                 subtitle = "\(model.format.uppercased()) · \(model.sizeText)"
                 currentFilename = model.name
                 currentPrompt = model.prompt ?? model.name
+                clearAssessment()
                 try await show(path: model.bestURL, name: model.name)
             } catch {
                 await report(error)
@@ -152,6 +159,7 @@ final class AppModel {
                 subtitle = ""
                 currentFilename = ""        // nothing the backend could match
                 currentPrompt = ""
+                clearAssessment()
                 try await show(path: text, name: "pasted-\(UUID().uuidString.prefix(8))")
             } catch {
                 await report(error)
@@ -179,22 +187,21 @@ final class AppModel {
         errorMessage = nil
 
         let filename = currentFilename
-        let prompt = currentPrompt
         let note = refineNote.trimmingCharacters(in: .whitespacesAndNewlines)
 
         Task {
             do {
                 let refined = try await APIClient.shared.refine(
-                    filename: filename, prompt: prompt, imageJPEG: jpeg, note: note)
+                    model: filename, imageJPEG: jpeg, note: note)
+
                 subtitle = refined.summary
                 currentFilename = refined.filename
+                assessment = refined.assessment
+                changes = refined.changes ?? []
+                scaleNote = refined.scaleNote
                 try await show(path: refined.url, name: refined.filename)
                 refineNote = ""
                 await refreshLibrary()
-            } catch APIError.badStatus(404, _) {
-                // The endpoint is not built yet. Say so plainly rather than
-                // showing a bare 404.
-                errorMessage = "The backend has no /refine endpoint yet."
             } catch {
                 await report(error)
             }
@@ -209,12 +216,19 @@ final class AppModel {
         phase = .viewing
     }
 
+    private func clearAssessment() {
+        assessment = nil
+        changes = []
+        scaleNote = nil
+    }
+
     func startOver() {
         modelURL = nil
         title = ""
         subtitle = ""
         arNote = ""
         errorMessage = nil
+        clearAssessment()
         phase = .load
     }
 

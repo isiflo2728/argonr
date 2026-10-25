@@ -25,25 +25,33 @@ fails with an ATS error, add `App Transport Security Settings` →
     GET  /models    -> [{name, format, size, created, url, prompt, public_url}]
     GET  /health    -> {"status": "ok"}
 
-    POST /refine    {"filename": "...usda",       which model this is a view of
-                     "prompt":   "a wooden chair", what it was asked to be
-                     "image_b64": "...",           JPEG of the AR view
-                     "note":     "legs too thin",  optional, may be ""
-                     "format":   "usda"}
-                    -> the same shape /model3d returns
+    POST /model3d/refine   multipart:
+                     model   filename from GET /models
+                     image   JPEG of the AR view
+                     note    optional, e.g. "it looks too small"
+                     format  glb
+                    -> {url, filename, parent, parts, vertices, faces,
+                        assessment, changes[], scale,
+                        apparent_size_m, target_size_m, skipped_edits[]}
 
 `Models.swift` is the only coupling. Change it and the backend's schema
 together, or neither.
 
-### Why the app asks for `usda`
+### Format
 
 RealityKit loads USD — `.usda`, `.usdc`, `.usdz` — and nothing else. Not glTF,
 not OBJ, not STL.
 
-The backend already models everything as parts with vertices, faces and a
-colour, which is the shape USD wants, so `mesh.py` exports it directly and
-nothing is lost. The alternative is shipping GLB and converting on the way,
-which costs a round trip and drops colour to whatever the converter recovers.
+The deployed backend offers `glb/obj/stl`, so the app asks for GLB and
+converts it to USD ASCII **on the device** (`GLBConverter.swift`). That keeps
+it working against the deployed backend with nothing else running. Geometry,
+node transforms and flat per-material colour survive; textures, PBR maps,
+animation and skinning do not.
+
+`mesh.py` in this repo adds a `usda` exporter that builds USD from the same
+part list every other format comes from, losing nothing. Once that ships,
+change `GenerateRequest.format` to `"usda"` — the download path already
+passes USD straight through, so nothing else needs to move.
 
 The app sniffs the format from the file's leading bytes rather than trusting
 the URL, because signed cloud links end in a query string and object keys
@@ -87,3 +95,17 @@ Only models that came from the backend can be refined — a pasted URL has no
 filename the backend would recognise, so the button is disabled for those.
 The SwiftUI overlay is a sibling view of the AR view, so the controls stay
 out of the captured frame.
+
+
+## 9. Verified against the deployed backend
+
+    POST /model3d {"prompt": "a wooden chair", "format": "glb"}
+      -> 34s, 17 parts, 136 vertices, uploaded to GCS
+    the GLB converts on device to 17 USD meshes, identical coordinates to the
+      reference converter, and renders through Apple's USD stack
+
+    POST /model3d/refine (multipart)
+      -> 6.6s, returns a new model plus its assessment and parent
+
+The refine endpoint is properly cautious: handed an image that did not match
+the model, it said so and changed nothing rather than inventing a correction.

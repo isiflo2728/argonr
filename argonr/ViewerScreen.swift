@@ -35,6 +35,7 @@ struct ViewerScreen: View {
         }
         .animation(motion, value: note)
         .animation(motion, value: app.isRefining)
+        .animation(motion, value: app.assessment)
     }
 
     private var motion: Animation? { reduceMotion ? nil : .snappy }
@@ -69,8 +70,40 @@ struct ViewerScreen: View {
         .padding(.top, 8)
     }
 
+    /// What the last refinement judged and changed. The reasoning is the
+    /// interesting part of a correction, so it is shown rather than swallowed.
+    private var assessmentCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let assessment = app.assessment {
+                Text(assessment)
+                    .font(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let scaleNote = app.scaleNote {
+                Label(scaleNote, systemImage: "arrow.up.left.and.arrow.down.right")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.tint)
+            }
+
+            ForEach(app.changes, id: \.self) { change in
+                Label(change, systemImage: "checkmark")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: 10))
+    }
+
     private var bottomBar: some View {
         VStack(spacing: 12) {
+            if app.assessment != nil || !app.changes.isEmpty {
+                assessmentCard
+            }
+
             if let error = app.errorMessage {
                 Text(error)
                     .font(.caption)

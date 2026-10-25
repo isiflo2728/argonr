@@ -53,19 +53,40 @@ struct APIClient {
         return try decoder.decode(GeneratedModel.self, from: data)
     }
 
-    /// POST /refine — improves a model using a photo of it in place.
-    /// Returns the same shape as /model3d.
-    func refine(filename: String, prompt: String, imageJPEG: Data, note: String) async throws -> GeneratedModel {
-        var request = URLRequest(url: Config.baseURL.appendingPathComponent("refine"))
+    /// POST /model3d/refine — hands the backend a photo of the model sitting
+    /// in the real world and gets back a corrected one. Multipart, because
+    /// the image goes up as a file rather than base64 in JSON.
+    func refine(model: String, imageJPEG: Data, note: String) async throws -> RefinedModel {
+        let boundary = "argonr.\(UUID().uuidString)"
+        var body = Data()
+
+        func field(_ name: String, _ value: String) {
+            body.append("--\(boundary)\r\n")
+            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+            body.append("\(value)\r\n")
+        }
+
+        field("model", model)
+        field("note", note)
+        field("format", "glb")
+
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"image\"; filename=\"view.jpg\"\r\n")
+        body.append("Content-Type: image/jpeg\r\n\r\n")
+        body.append(imageJPEG)
+        body.append("\r\n--\(boundary)--\r\n")
+
+        var request = URLRequest(url: Config.baseURL
+            .appendingPathComponent("model3d")
+            .appendingPathComponent("refine"))
         request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(
-            RefineRequest(filename: filename, prompt: prompt,
-                          imageB64: imageJPEG.base64EncodedString(), note: note))
+        request.setValue("multipart/form-data; boundary=\(boundary)",
+                         forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
 
         let (data, response) = try await session.data(for: request)
         try check(response, data)
-        return try decoder.decode(GeneratedModel.self, from: data)
+        return try decoder.decode(RefinedModel.self, from: data)
     }
 
     /// GET /models — everything built so far.
@@ -99,18 +120,33 @@ struct APIClient {
         let (temp, response) = try await session.download(from: url)
         try check(response, Data())
 
-        let suffix = try Self.usdExtension(of: temp, urlHint: url.pathExtension)
-        let dest = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(name).\(suffix)")
+        let data = try Data(contentsOf: temp)
+        try? FileManager.default.removeItem(at: temp)
+
+        // The backend serves GLB today. RealityKit will not read it, so it is
+        // converted here — which keeps the app working against the deployed
+        // backend with nothing else running. USD passes straight through, so
+        // this costs nothing once the backend's USD exporter ships.
+        let dest: URL
+        let payload: Data
+        if GLBConverter.isGLTF(data) {
+            dest = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(name).usda")
+            payload = Data(try GLBConverter.usda(from: data).utf8)
+        } else {
+            let suffix = try Self.usdExtension(of: data, urlHint: url.pathExtension)
+            dest = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(name).\(suffix)")
+            payload = data
+        }
+
         try? FileManager.default.removeItem(at: dest)
-        try FileManager.default.moveItem(at: temp, to: dest)
+        try payload.write(to: dest)
         return dest
     }
 
-    static func usdExtension(of file: URL, urlHint: String) throws -> String {
-        let handle = try FileHandle(forReadingFrom: file)
-        defer { try? handle.close() }
-        let head = try handle.read(upToCount: 8) ?? Data()
+    static func usdExtension(of data: Data, urlHint: String) throws -> String {
+        let head = data.prefix(8)
 
         if head.starts(with: Data("#usda".utf8))    { return "usda" }
         if head.starts(with: Data("PXR-USDC".utf8)) { return "usdc" }
@@ -118,10 +154,6 @@ struct APIClient {
 
         if ["usda", "usdc", "usdz"].contains(urlHint) { return urlHint }
 
-        if String(decoding: head.prefix(4), as: UTF8.self) == "glTF"
-            || ["glb", "gltf"].contains(urlHint) {
-            throw APIError.unsupportedFormat("glTF — ask the backend for format=usda")
-        }
         throw APIError.unsupportedFormat(urlHint.isEmpty ? "an unrecognised file" : ".\(urlHint)")
     }
 
@@ -135,5 +167,11 @@ struct APIClient {
             detail = message
         }
         throw APIError.badStatus(http.statusCode, String(detail.prefix(300)))
+    }
+}
+
+private extension Data {
+    mutating func append(_ string: String) {
+        append(Data(string.utf8))
     }
 }
