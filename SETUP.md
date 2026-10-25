@@ -116,3 +116,27 @@ static host:
     MODEL_BASE_URL=https://storage.googleapis.com/your-bucket python3 mock_server.py
 
 `model_path` then comes back absolute, and the app fetches from there.
+
+
+## 7. Models that are not USD
+
+The viewer needs USD. If the model host produces **GLB, OBJ or STL** — which
+is common, since most generators emit glTF — point the app at the conversion
+proxy instead of at the file:
+
+    http://<laptop>:8787/convert?url=<url-encoded model url>
+
+It fetches the model, converts it to USD ASCII, and caches the result by URL.
+A model does not change under its own link, so the second fetch is instant.
+
+What survives the conversion: triangle geometry, node transforms (translation,
+rotation, scale), and flat base colour per material. What does not: textures,
+PBR maps, animation, skinning. For a model being read on a table that is the
+part that matters.
+
+Verified against hand-built files of each format, including a GLB whose
+second mesh is positioned by a node transform — the colours and the offset
+both come through.
+
+No conversion is needed if the host can emit `.usda`, `.usdc` or `.usdz`.
+That stays the better option: ask first, convert second.

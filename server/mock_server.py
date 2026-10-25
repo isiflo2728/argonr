@@ -14,7 +14,7 @@ Contract (matches Models.swift):
     GET  /status/<job>                                              -> JobStatus
     GET  /model/<job>/<n>.usdz                                      -> binary
 """
-import email, json, os, shutil, subprocess, sys, threading, time, uuid
+import email, hashlib, json, os, shutil, subprocess, sys, threading, time, urllib.parse, urllib.request, uuid
 from email.policy import default as email_policy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -173,6 +173,31 @@ def parse_multipart(content_type, body):
     return fields
 
 
+CONVERTED = ROOT / "converted"
+
+
+def fetch_and_convert(source):
+    """Pulls a model from wherever it lives and hands back USD.
+
+    The phone cannot read GLB, OBJ or STL, and the host producing them may not
+    want to change. Converting in the middle means neither side has to move.
+    Results are cached by URL — a model does not change under its own link.
+    """
+    import mesh_convert
+    CONVERTED.mkdir(exist_ok=True)
+    cached = CONVERTED / (hashlib.sha256(source.encode()).hexdigest()[:16] + ".usda")
+    if cached.exists():
+        return cached, True
+
+    req = urllib.request.Request(source, headers={"User-Agent": "argonr/1.0"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        raw = r.read()
+
+    hint = urllib.parse.urlparse(source).path.lower()
+    cached.write_text(mesh_convert.convert(raw, hint))
+    return cached, False
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -252,6 +277,22 @@ class Handler(BaseHTTPRequestHandler):
                                         "requests")} if state else None
             body = json.dumps(payload).encode() if payload else b'{"error":"no such job"}'
             return self._send(200 if payload else 404, body)
+
+        if parts[:1] == ["convert"]:
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            source = (query.get("url") or [""])[0]
+            if not source.startswith(("http://", "https://")):
+                return self._send(400, b'{"error":"need ?url=https://..."}')
+            try:
+                path, was_cached = fetch_and_convert(source)
+            except Exception as exc:
+                print(f"[mock] convert failed for {source}: {exc}")
+                return self._send(502, json.dumps(
+                    {"error": f"{type(exc).__name__}: {exc}"[:300]}).encode())
+            body = path.read_bytes()
+            print(f"[mock] convert {'(cached) ' if was_cached else ''}{source} "
+                  f"-> {len(body)}B, {body.count(b'def Mesh')} meshes")
+            return self._send(200, body, "text/plain")
 
         if len(parts) == 3 and parts[0] == "model":
             path = OUT / parts[1] / parts[2]

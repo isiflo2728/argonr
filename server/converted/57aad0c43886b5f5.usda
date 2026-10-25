@@ -1,0 +1,26 @@
+#usda 1.0
+(
+    defaultPrim = "Model"
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+def Xform "Model"
+{
+    def Mesh "red_0_0"
+    {
+        int[] faceVertexCounts = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+        int[] faceVertexIndices = [0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 0, 4, 5, 0, 5, 1, 1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0]
+        point3f[] points = [(-0.5, -0.5, -0.5), (0.5, -0.5, -0.5), (0.5, 0.5, -0.5), (-0.5, 0.5, -0.5), (-0.5, -0.5, 0.5), (0.5, -0.5, 0.5), (0.5, 0.5, 0.5), (-0.5, 0.5, 0.5)]
+        color3f[] primvars:displayColor = [(0.9, 0.15, 0.1)]
+        uniform token subdivisionScheme = "none"
+    }
+    def Mesh "blue_1_0"
+    {
+        int[] faceVertexCounts = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+        int[] faceVertexIndices = [0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 0, 4, 5, 0, 5, 1, 1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0]
+        point3f[] points = [(1.75, -0.25, -0.25), (2.25, -0.25, -0.25), (2.25, 0.25, -0.25), (1.75, 0.25, -0.25), (1.75, -0.25, 0.25), (2.25, -0.25, 0.25), (2.25, 0.25, 0.25), (1.75, 0.25, 0.25)]
+        color3f[] primvars:displayColor = [(0.15, 0.3, 0.9)]
+        uniform token subdivisionScheme = "none"
+    }
+}
