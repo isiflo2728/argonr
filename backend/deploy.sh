@@ -19,6 +19,9 @@ BUCKET="${BUCKET:-argon-hackathon-models-383c2c}"
 SECRET="${SECRET:-gemini-api-key}"
 SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-argon-uploader@${PROJECT}.iam.gserviceaccount.com}"
 GEMINI_MODEL="${GEMINI_MODEL:-gemini-4-argon}"
+# One instance stays warm so the first request doesn't wait for a cold start.
+# It is billed while idle; set MIN_INSTANCES=0 after the hackathon.
+MIN_INSTANCES="${MIN_INSTANCES:-1}"
 MAX_INSTANCES="${MAX_INSTANCES:-3}"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/argonr/backend:latest"
 
@@ -56,7 +59,9 @@ gc run deploy "$SERVICE" \
   --set-env-vars="GCS_BUCKET=${BUCKET},GCS_PUBLIC_URLS=true,GEMINI_MODEL=${GEMINI_MODEL}" \
   --allow-unauthenticated \
   --timeout=300 \
+  --min-instances="$MIN_INSTANCES" \
   --max-instances="$MAX_INSTANCES" \
+  --cpu-boost \
   --memory=512Mi
 
 URL="$(gc run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"

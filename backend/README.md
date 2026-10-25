@@ -99,11 +99,15 @@ overridden from the environment. What it runs, if you'd rather do it by hand:
       --service-account=argon-uploader@$P.iam.gserviceaccount.com \
       --set-secrets=GEMINI_API_KEY=gemini-api-key:latest \
       --set-env-vars=GCS_BUCKET=argon-hackathon-models-383c2c,GCS_PUBLIC_URLS=true,GEMINI_MODEL=gemini-4-argon \
-      --allow-unauthenticated --timeout=300 --max-instances=3 --memory=512Mi
+      --allow-unauthenticated --timeout=300 --min-instances=1 --max-instances=3 --cpu-boost --memory=512Mi
 
 One-time setup: the `gemini-api-key` secret must exist, and the service account
 needs **Secret Manager Secret Accessor** on it plus **Storage Object Creator**
 and **Storage Object Viewer** on the bucket.
+
+`--min-instances=1` keeps one instance warm so requests never hit a cold
+start. That instance is billed while idle, so run
+`MIN_INSTANCES=0 SKIP_BUILD=1 ./deploy.sh` once the hackathon is over.
 
 The service is public so the phone can reach it, which also means anyone with
 the URL can spend Gemini quota. `--max-instances` caps the damage.
