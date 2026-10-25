@@ -10,17 +10,18 @@ import Foundation
 
 enum Config {
     private static let key = "argonr.serverBase"
-    static let fallback = "http://10.1.63.55:8010"
+    static let fallback = "https://argonr-backend-641066446400.us-central1.run.app"
 
-    /// The backend: locally `uvicorn app.main:app` on :8000, or the
-    /// Cloud Run URL once it is deployed.
-    /// Find your laptop's address with:  ipconfig getifaddr en0
+    /// The deployed backend. Override in Settings to point at a laptop
+    /// running `uvicorn app.main:app` — find its address with
+    /// `ipconfig getifaddr en0`.
     /// Addresses that were defaults in earlier builds. A stored value wins
     /// over the compiled default, so without this a stale placeholder keeps
     /// being dialled long after the real one changed — which looks like a
     /// network failure rather than a wrong setting.
     private static let stale = ["http://192.168.1.100:8787",
-                                "http://192.168.1.100:8000"]
+                                "http://192.168.1.100:8000",
+                                "http://10.1.63.55:8010"]
 
     static var serverBase: String {
         get {
