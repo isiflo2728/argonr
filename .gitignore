@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+
+# Swift Package Manager
+.swiftpm/
+.build/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Server output: reference photos people shot and the models built from them.
+# Never commit these — they are user content and they are large.
+server/runs/
+server/fixtures/*.usdz

@@ -8,14 +8,17 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var app = AppModel()
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        switch app.phase {
+        case .capture:
+            CaptureScreen(app: app)
+        case .generating:
+            GeneratingScreen(app: app)
+        case .viewing:
+            ViewerScreen(app: app)
         }
-        .padding()
     }
 }
 
