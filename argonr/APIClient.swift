@@ -30,15 +30,15 @@ struct APIClient {
 
     private var session: URLSession {
         let c = URLSessionConfiguration.ephemeral
-        c.timeoutIntervalForRequest = 60
+        c.timeoutIntervalForRequest = 120  // a 720p clip takes a moment to push
         c.waitsForConnectivity = false
         return URLSession(configuration: c)
     }
 
-    /// POST /generate — multipart: `image` (jpeg, optional) + `hint` (text).
-    /// Returns the job id.
-    func start(imageJPEG: Data?, hint: String) async throws -> String {
-        guard imageJPEG != nil || !hint.isEmpty else { throw APIError.noInput }
+    /// POST /generate — multipart: `video` (mp4) or `image` (jpeg), plus
+    /// `hint` and `kind`. Returns the job id.
+    func start(videoURL: URL?, imageJPEG: Data?, hint: String, kind: CaptureKind) async throws -> String {
+        guard videoURL != nil || imageJPEG != nil || !hint.isEmpty else { throw APIError.noInput }
 
         let boundary = "argonr.\(UUID().uuidString)"
         var body = Data()
@@ -49,14 +49,21 @@ struct APIClient {
             body.append("\(value)\r\n")
         }
 
-        field("hint", hint)
-
-        if let imageJPEG {
+        func file(_ name: String, _ filename: String, _ mime: String, _ data: Data) {
             body.append("--\(boundary)\r\n")
-            body.append("Content-Disposition: form-data; name=\"image\"; filename=\"reference.jpg\"\r\n")
-            body.append("Content-Type: image/jpeg\r\n\r\n")
-            body.append(imageJPEG)
+            body.append("Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n")
+            body.append("Content-Type: \(mime)\r\n\r\n")
+            body.append(data)
             body.append("\r\n")
+        }
+
+        field("hint", hint)
+        field("kind", kind.serverValue)
+
+        if let videoURL {
+            file("video", "reference.mp4", "video/mp4", try Data(contentsOf: videoURL))
+        } else if let imageJPEG {
+            file("image", "reference.jpg", "image/jpeg", imageJPEG)
         }
         body.append("--\(boundary)--\r\n")
 

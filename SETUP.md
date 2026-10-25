@@ -2,9 +2,10 @@
 
 Phone is the viewer. Laptop runs the loop. They talk over the local network.
 
-## 0. Blender (required — not installed yet)
+## 0. Dependencies
 
-    brew install --cask blender
+    brew install --cask blender     # generates the models
+    brew install ffmpeg             # extracts reference frames from the clip
 
 Needed for the real pipeline, not just the mock. Until it's there, models come
 back `null` and the AR view stays empty.
@@ -37,9 +38,10 @@ if plain HTTP gets blocked; try without it first.
 
 ## 3. What's wired
 
-    PromptScreen    type a prompt, edit the server address
+    CaptureScreen   record a 10s orbit (or fall back to one photo)
     GeneratingScreen  live loop stages, current defect in Argon's words
-    ViewerScreen    AR + history strip; tap v0 / v5 to swap in place
+    ViewerScreen    AR + version strip; tap v0 / v5 to swap in place,
+                    Iterate for another pass without leaving AR
 
 The viewer opens the moment iteration 0 lands, so the model is on the table
 while the loop is still improving it. That swap is the demo.
@@ -49,7 +51,9 @@ while the loop is still improving it. That swap is the demo.
 Swap `mock_server.py` for the real one; keep these three endpoints and the
 iOS side needs no changes.
 
-    POST /generate            {"prompt": "..."}  ->  {"job_id": "..."}
+    POST /generate   multipart: video (mp4) OR image (jpeg), + hint, + kind
+                     kind is "scene" (orbit video) or "object" (single photo)
+                     -> {"job_id": "..."}
     GET  /status/<job>        -> JobStatus
     GET  /model/<job>/<n>.usdz
 
@@ -58,8 +62,8 @@ JobStatus:
     {"stage": "generating|rendering|watching|critiquing|fixing|done|error",
      "iteration": 2, "total_iterations": 6, "done": false, "error": null,
      "iterations": [
-       {"index": 0, "score": 0.38, "model_path": "/model/ab12/0.usdz",
-        "headline": "first pass",
+       {"index": 0, "score": 0.38, "match_score": 0.42, "object_count": 3,
+        "model_path": "/model/ab12/0.usdz", "headline": "first pass",
         "defects": [{"id": "d1", "rubric": "G4", "severity": "high",
                      "evidence": "142 flipped faces; lid renders black",
                      "cause": "extrude without recalculating normals",

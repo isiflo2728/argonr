@@ -13,6 +13,9 @@ import ARKit
 
 struct ARContainerView: UIViewRepresentable {
     var modelURL: URL?
+    /// Longest side the result is scaled to. A desk scene needs more room
+    /// than a single mug, so the capture kind decides this.
+    var fitMeters: Float
     var onNote: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(onNote: onNote) }
@@ -33,12 +36,14 @@ struct ARContainerView: UIViewRepresentable {
 
         context.coordinator.arView = view
         context.coordinator.anchor = anchor
+        context.coordinator.fitMeters = fitMeters
         context.coordinator.load(modelURL)
         return view
     }
 
     func updateUIView(_ uiView: ARView, context: Context) {
         context.coordinator.onNote = onNote
+        context.coordinator.fitMeters = fitMeters
         context.coordinator.load(modelURL)
     }
 
@@ -51,6 +56,7 @@ struct ARContainerView: UIViewRepresentable {
         var arView: ARView?
         var anchor: AnchorEntity?
         var onNote: (String) -> Void
+        var fitMeters: Float = 0.3
 
         private var currentURL: URL?
         private var host: ModelEntity?
@@ -82,7 +88,7 @@ struct ARContainerView: UIViewRepresentable {
                     // gestures. Parent it to a ModelEntity so it can.
                     let wrapper = ModelEntity()
                     wrapper.addChild(entity)
-                    Self.fit(entity, longestSide: 0.3)
+                    Self.fit(entity, longestSide: self.fitMeters)
                     wrapper.generateCollisionShapes(recursive: true)
 
                     self.host?.removeFromParent()

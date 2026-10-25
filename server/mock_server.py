@@ -58,6 +58,29 @@ HEADLINES = ["first pass", "scale corrected", "loose geometry removed",
              "silhouette tightened", "second material added", "silhouette tuned"]
 
 
+FFMPEG = shutil.which("ffmpeg")
+
+
+def extract_frames(job, count=8):
+    """Even-spaced stills from the reference clip. These are what the critique
+    scores against at specific angles; the clip itself is what Argon reasons
+    over. No ffmpeg -> the real backend can do this instead."""
+    clip = OUT / job / "reference.mp4"
+    if not clip.exists() or not FFMPEG:
+        return []
+    frames_dir = OUT / job / "frames"
+    frames_dir.mkdir(exist_ok=True)
+    try:
+        subprocess.run(
+            [FFMPEG, "-y", "-loglevel", "error", "-i", str(clip),
+             "-vf", f"fps={count}/10,scale=640:-2", str(frames_dir / "f%02d.jpg")],
+            check=True, capture_output=True, timeout=120)
+    except Exception as exc:
+        print(f"[mock] ffmpeg failed: {exc}")
+        return []
+    return sorted(frames_dir.glob("*.jpg"))
+
+
 def build_model(job, index):
     dest = OUT / job / f"{index}.usdz"
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -104,7 +127,8 @@ def worker(job):
                 "index": index,
                 "score": round(min(0.38 + 0.095 * index, 0.97), 2),
                 "match_score": round(min(0.42 + 0.09 * index, 0.95), 2)
-                               if JOBS[job]["has_image"] else None,
+                               if JOBS[job]["has_reference"] else None,
+                "object_count": min(1 + index, 4) if JOBS[job]["kind"] == "scene" else None,
                 "model_path": f"/model/{job}/{index}.usdz" if path else None,
                 "headline": HEADLINES[min(index, len(HEADLINES) - 1)],
                 "defects": DEFECTS[index:index + 2],
@@ -154,21 +178,33 @@ class Handler(BaseHTTPRequestHandler):
 
         if parts == ["generate"]:
             fields = parse_multipart(self.headers.get("Content-Type", ""), body)
+            video = fields.get("video") if isinstance(fields.get("video"), bytes) else None
             image = fields.get("image") if isinstance(fields.get("image"), bytes) else None
             hint = fields.get("hint", "")
+            kind = fields.get("kind", "object")
 
             job = uuid.uuid4().hex[:8]
             (OUT / job).mkdir(parents=True, exist_ok=True)
-            if image:
+            if video:
+                (OUT / job / "reference.mp4").write_bytes(video)
+            elif image:
                 (OUT / job / "reference.jpg").write_bytes(image)
 
             with LOCK:
-                JOBS[job] = {"hint": hint, "has_image": bool(image), "stage": "generating",
+                JOBS[job] = {"hint": hint, "kind": kind,
+                             "has_reference": bool(video or image),
+                             "stage": "generating",
                              "iteration": 0, "total_iterations": FIRST_PASS,
                              "target": FIRST_PASS, "done": False, "running": False,
                              "iterations": [], "error": None}
+
+            size = len(video or image or b"")
+            source = "video" if video else "image" if image else "hint only"
+            print(f"[mock] job {job}: kind={kind} {source} {size}B hint={hint!r}")
+            if video:
+                frames = extract_frames(job)
+                print(f"[mock] job {job}: extracted {len(frames)} reference frames")
             start_worker(job)
-            print(f"[mock] job {job}: hint={hint!r} image={len(image) if image else 0}B")
             return self._send(200, json.dumps({"job_id": job}).encode())
 
         if len(parts) == 2 and parts[0] == "iterate":
@@ -191,7 +227,7 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 state = JOBS.get(parts[1])
                 payload = {k: v for k, v in state.items()
-                           if k not in ("running", "has_image", "hint")} if state else None
+                           if k not in ("running", "has_reference", "hint", "kind")} if state else None
             body = json.dumps(payload).encode() if payload else b'{"error":"no such job"}'
             return self._send(200 if payload else 404, body)
 

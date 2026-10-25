@@ -21,7 +21,8 @@ struct ViewerScreen: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            ARContainerView(modelURL: app.selectedModelURL) { note in
+            ARContainerView(modelURL: app.selectedModelURL,
+                            fitMeters: app.kind.fitMeters) { note in
                 arNote = note
             }
             .ignoresSafeArea()
@@ -63,6 +64,9 @@ struct ViewerScreen: View {
                 Text("score \(app.scoreText)")
                 if let match = app.matchText {
                     Text("· match \(match)")
+                }
+                if let objects = app.objectCountText {
+                    Text("· \(objects)")
                 }
             }
             .font(.caption)
@@ -122,7 +126,8 @@ struct ViewerScreen: View {
                     .scaledToFit()
                     .accessibilityLabel("Your reference photo")
             }
-            Text("What Argon scores the model against")
+            Text(app.capturedVideo != nil ? "The clip Argon scores the model against"
+                                              : "What Argon scores the model against")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 24)

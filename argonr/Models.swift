@@ -24,9 +24,9 @@ struct JobStatus: Decodable {
 
     var stageLabel: String {
         switch stage {
-        case "generating": "Modelling from your photo"
+        case "generating": "Modelling from your capture"
         case "rendering":  "Rendering turntable"
-        case "watching":   "Argon is comparing to your photo"
+        case "watching":   "Argon is comparing to your capture"
         case "critiquing": "Finding what is wrong"
         case "fixing":     "Applying fixes"
         case "done":       "Finished"
@@ -40,9 +40,12 @@ struct IterationInfo: Decodable, Identifiable, Equatable {
     let index: Int
     /// Overall rubric score, 0–1.
     let score: Double
-    /// How closely the render matches the reference photo, 0–1. Nil for a
-    /// text-only job, where there is nothing to match against.
+    /// How closely the render matches the reference, 0–1. Nil when there was
+    /// nothing to match against (a hint-only job).
     let matchScore: Double?
+    /// For scenes: how many distinct objects the model contains. Nil for a
+    /// single-object job.
+    let objectCount: Int?
     /// Server path, e.g. "/model/abc123/2.usdz". Nil until the export lands.
     let modelPath: String?
     /// One line for the history strip: "normals flipped -> fixed"

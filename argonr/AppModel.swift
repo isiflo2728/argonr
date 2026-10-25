@@ -2,9 +2,13 @@
 //  AppModel.swift
 //  argonr
 //
-//  Owns the job lifecycle: send the photo, poll the laptop, pull each .usdz
+//  Owns the job lifecycle: send the capture, poll the laptop, pull each .usdz
 //  down as it lands. The viewer opens as soon as iteration 0 arrives, so the
-//  model is on the table while the loop is still improving it.
+//  result is on the floor while the loop is still improving it.
+//
+//  Video is the primary input — an orbit gives Argon every side, and Argon is
+//  strongest on video. A single photo stays supported because on the day
+//  someone's recording will fail and you want a one-tap retreat.
 //
 
 import Foundation
@@ -18,7 +22,17 @@ final class AppModel {
     enum Phase { case capture, generating, viewing }
 
     var phase: Phase = .capture
+    var kind: CaptureKind = .scene
+
+    /// Set for a photo capture.
     var capturedImage: UIImage?
+    /// Set for a video capture, already compressed and trimmed.
+    var capturedVideo: URL?
+    /// First frame of the video, for the capture well.
+    var videoThumbnail: UIImage?
+    var videoSeconds: Double?
+    var isPreparing = false
+
     var hint: String = ""
     var serverBase: String = Config.serverBase
 
@@ -28,23 +42,29 @@ final class AppModel {
     var modelURLs: [Int: URL] = [:]
     var errorMessage: String?
     var loaderNote: String = ""
-    var isIterating: Bool = false
+    var isIterating = false
 
     private var jobId: String?
     private var pollTask: Task<Void, Never>?
+
+    // MARK: - Derived
 
     var selectedModelURL: URL? { modelURLs[selected] }
     var selectedIteration: IterationInfo? { iterations.first { $0.index == selected } }
     var isRunning: Bool { !(status?.done ?? true) }
 
+    /// What the capture well shows — video thumbnail or the photo.
+    var previewImage: UIImage? { videoThumbnail ?? capturedImage }
+
+    var hasCapture: Bool { capturedVideo != nil || capturedImage != nil }
+
     var canGenerate: Bool {
-        capturedImage != nil || !hint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard !isPreparing else { return false }
+        return hasCapture || !hint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// Iterating only makes sense once a pass has finished.
-    var canIterate: Bool {
-        jobId != nil && !isRunning && !isIterating
-    }
+    var canIterate: Bool { jobId != nil && !isRunning && !isIterating }
 
     var scoreText: String {
         guard let score = selectedIteration?.score else { return "—" }
@@ -56,21 +76,69 @@ final class AppModel {
         return String(format: "%.0f%%", match * 100)
     }
 
+    var objectCountText: String? {
+        guard let count = selectedIteration?.objectCount else { return nil }
+        return count == 1 ? "1 object" : "\(count) objects"
+    }
+
+    var durationText: String? {
+        guard let seconds = videoSeconds else { return nil }
+        return String(format: "%.1fs", seconds)
+    }
+
+    // MARK: - Capture
+
+    /// Compresses off the main thread and keeps the thumbnail in step.
+    func acceptVideo(_ source: URL) {
+        isPreparing = true
+        errorMessage = nil
+        capturedImage = nil
+
+        Task {
+            do {
+                let compressed = try await MediaPrep.compress(source)
+                capturedVideo = compressed
+                videoThumbnail = await MediaPrep.thumbnail(compressed)
+                videoSeconds = await MediaPrep.seconds(of: compressed)
+                kind = .scene
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isPreparing = false
+        }
+    }
+
+    func acceptPhoto(_ image: UIImage) {
+        clearCapture()
+        capturedImage = image
+        kind = .object
+    }
+
+    func clearCapture() {
+        capturedImage = nil
+        capturedVideo = nil
+        videoThumbnail = nil
+        videoSeconds = nil
+    }
+
     // MARK: - Lifecycle
 
     func generate() {
         guard canGenerate else { return }
 
         Config.serverBase = serverBase.trimmingCharacters(in: .whitespacesAndNewlines)
+        let video = capturedVideo
         let jpeg = capturedImage?.jpegData(compressionQuality: 0.8)
         let hintText = hint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let captureKind = kind
 
         resetJob()
         phase = .generating
 
         pollTask = Task {
             do {
-                let id = try await APIClient.shared.start(imageJPEG: jpeg, hint: hintText)
+                let id = try await APIClient.shared.start(
+                    videoURL: video, imageJPEG: jpeg, hint: hintText, kind: captureKind)
                 jobId = id
                 await poll(job: id)
             } catch {
@@ -79,8 +147,8 @@ final class AppModel {
         }
     }
 
-    /// One more pass, on demand. This is the demo gesture — tap it in AR and
-    /// watch the model on the table sharpen.
+    /// One more pass, on demand. This is the demo gesture — tap it standing in
+    /// the scene and watch it sharpen around you.
     func iterate() {
         guard let job = jobId, canIterate else { return }
         isIterating = true
@@ -106,7 +174,7 @@ final class AppModel {
         pollTask?.cancel()
         pollTask = nil
         resetJob()
-        capturedImage = nil
+        clearCapture()
         hint = ""
         phase = .capture
     }
@@ -159,7 +227,7 @@ final class AppModel {
                     path: path, job: job, iteration: iteration.index)
                 modelURLs[iteration.index] = url
 
-                // First model down: get it onto the table immediately.
+                // First model down: get it into the room immediately.
                 if phase == .generating {
                     selected = iteration.index
                     phase = .viewing

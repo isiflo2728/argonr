@@ -2,8 +2,8 @@
 //  Config.swift
 //  argonr
 //
-//  Where the laptop running loop.py lives. Editable from the prompt screen
-//  so you can fix it on the venue wifi without a rebuild.
+//  Where the laptop running the loop lives. Editable from the capture screen
+//  so you can fix it on venue wifi without a rebuild.
 //
 
 import Foundation
@@ -22,4 +22,27 @@ enum Config {
 
     /// How often the phone asks the laptop what the loop is doing.
     static let pollSeconds: UInt64 = 1
+}
+
+/// What the user captured, which decides how big the result lands in AR and
+/// what the server is being asked to build.
+enum CaptureKind {
+    case object      // one photo, one thing
+    case scene       // an orbit video of several things on a surface
+
+    /// Longest side the result is scaled to when placed. A desk scene needs
+    /// room; a single mug does not.
+    var fitMeters: Float {
+        switch self {
+        case .object: 0.3
+        case .scene:  0.8
+        }
+    }
+
+    var serverValue: String {
+        switch self {
+        case .object: "object"
+        case .scene:  "scene"
+        }
+    }
 }

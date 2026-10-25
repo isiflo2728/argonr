@@ -2,11 +2,11 @@
 //  CaptureScreen.swift
 //  argonr
 //
-//  Photograph the object. The photo is both the input and the reference the
-//  critique loop scores against, so it does double duty — which is why there
-//  is no way to discard it once a job is running.
+//  Record an orbit of the thing, or a desk of things. The capture is both the
+//  input and the reference the critique scores against, so it does double
+//  duty — which is why the guidance about keeping it centred matters.
 //
-//  Spacing grid: 4 / 8 / 12 / 16 / 24 / 32. Card radius: 10. Nothing else.
+//  Spacing grid: 4 / 8 / 12 / 16 / 20 / 24 / 32. Card radius: 10.
 //
 
 import SwiftUI
@@ -15,16 +15,16 @@ import PhotosUI
 struct CaptureScreen: View {
     @Bindable var app: AppModel
 
-    @State private var showCamera = false
-    @State private var pickerItem: PhotosPickerItem?
+    @State private var cameraMode: CameraPicker.Mode?
+    @State private var videoItem: PhotosPickerItem?
     @FocusState private var hintFocused: Bool
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 header
-                photoWell
-                sourceButtons
+                captureWell
+                captureButtons
                 hintField
                 serverField
 
@@ -38,7 +38,7 @@ struct CaptureScreen: View {
                     hintFocused = false
                     app.generate()
                 } label: {
-                    Text("Build it")
+                    Text(app.isPreparing ? "Compressing" : "Build it")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
@@ -50,16 +50,17 @@ struct CaptureScreen: View {
             .padding(.vertical, 24)
         }
         .scrollDismissesKeyboard(.interactively)
-        .fullScreenCover(isPresented: $showCamera) {
-            CameraPicker { image in app.capturedImage = image }
+        .fullScreenCover(item: $cameraMode) { mode in
+            CameraPicker(mode: mode,
+                         onPhoto: { app.acceptPhoto($0) },
+                         onVideo: { app.acceptVideo($0) })
                 .ignoresSafeArea()
         }
-        .onChange(of: pickerItem) { _, item in
+        .onChange(of: videoItem) { _, item in
             guard let item else { return }
             Task {
-                if let data = try? await item.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    app.capturedImage = image
+                if let movie = try? await item.loadTransferable(type: MovieFile.self) {
+                    app.acceptVideo(movie.url)
                 }
             }
         }
@@ -69,42 +70,40 @@ struct CaptureScreen: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("argonr")
                 .font(.largeTitle.weight(.semibold))
-            Text("Photograph an object. Argon models it, compares the model to your photo, and fixes what it got wrong.")
+            Text("Walk a slow circle around it. Argon builds the scene, compares it to your footage, and fixes what it got wrong.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
     }
 
+    // MARK: - Well
+
     @ViewBuilder
-    private var photoWell: some View {
-        if let image = app.capturedImage {
-            Image(uiImage: image)
+    private var captureWell: some View {
+        if let preview = app.previewImage {
+            Image(uiImage: preview)
                 .resizable()
                 .scaledToFill()
                 .frame(height: 240)
                 .clipShape(.rect(cornerRadius: 10))
-                .overlay(alignment: .topTrailing) {
-                    Button {
-                        app.capturedImage = nil
-                        pickerItem = nil
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.footnote.weight(.bold))
-                            .frame(width: 44, height: 44)
-                            .background(.ultraThinMaterial, in: .circle)
-                    }
-                    .padding(8)
-                    .accessibilityLabel("Remove photo")
-                }
-                .accessibilityLabel("Reference photo")
+                .overlay(alignment: .bottomLeading) { wellBadge }
+                .overlay(alignment: .topTrailing) { clearButton }
+                .accessibilityLabel(app.capturedVideo != nil ? "Reference clip" : "Reference photo")
         } else {
             VStack(spacing: 8) {
-                Image(systemName: "cube.transparent")
-                    .font(.largeTitle.weight(.light))
-                    .foregroundStyle(.tertiary)
-                Text("No photo yet")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                if app.isPreparing {
+                    ProgressView()
+                    Text("Compressing")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Image(systemName: "cube.transparent")
+                        .font(.largeTitle.weight(.light))
+                        .foregroundStyle(.tertiary)
+                    Text("Nothing captured yet")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             .frame(maxWidth: .infinity)
             .frame(height: 240)
@@ -112,25 +111,73 @@ struct CaptureScreen: View {
         }
     }
 
-    private var sourceButtons: some View {
-        HStack(spacing: 12) {
-            Button {
-                showCamera = true
-            } label: {
-                Label("Take photo", systemImage: "camera.fill")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-            }
-            .buttonStyle(.bordered)
+    private var wellBadge: some View {
+        HStack(spacing: 4) {
+            Image(systemName: app.capturedVideo != nil ? "video.fill" : "photo.fill")
+            Text(app.capturedVideo != nil
+                 ? (app.durationText ?? "clip")
+                 : "single photo")
+        }
+        .font(.caption)
+        .monospacedDigit()
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(.ultraThinMaterial, in: .capsule)
+        .padding(8)
+    }
 
-            PhotosPicker(selection: $pickerItem, matching: .images) {
-                Label("Choose", systemImage: "photo.on.rectangle")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+    private var clearButton: some View {
+        Button {
+            app.clearCapture()
+            videoItem = nil
+        } label: {
+            Image(systemName: "xmark")
+                .font(.footnote.weight(.bold))
+                .frame(width: 44, height: 44)
+                .background(.ultraThinMaterial, in: .circle)
+        }
+        .padding(8)
+        .accessibilityLabel("Remove capture")
+    }
+
+    // MARK: - Buttons
+
+    private var captureButtons: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                Button {
+                    cameraMode = .video
+                } label: {
+                    Label("Record orbit", systemImage: "video.fill")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.bordered)
+
+                PhotosPicker(selection: $videoItem, matching: .videos) {
+                    Label("Choose clip", systemImage: "film")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.bordered)
+
+            Text("Up to \(Int(MediaPrep.maxSeconds))s, kept centred. Several things on one surface works better than a whole room.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+
+            Button {
+                cameraMode = .photo
+            } label: {
+                Label("Use a single photo instead", systemImage: "camera")
+                    .font(.footnote)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
         }
     }
+
+    // MARK: - Fields
 
     private var hintField: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -145,7 +192,7 @@ struct CaptureScreen: View {
                 .padding(12)
                 .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 10))
 
-            Text("Material, style, or a part the photo hides.")
+            Text("Material, style, or something the footage never shows.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
@@ -166,6 +213,15 @@ struct CaptureScreen: View {
                 .padding(12)
                 .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 10))
                 .accessibilityLabel("Server address")
+        }
+    }
+}
+
+extension CameraPicker.Mode: Identifiable {
+    public var id: Int {
+        switch self {
+        case .photo: 0
+        case .video: 1
         }
     }
 }
