@@ -1,0 +1,72 @@
+[
+  {
+    "iteration": 1,
+    "version": 1,
+    "metric": 1,
+    "metricLabel": "m",
+    "steps": 4,
+    "outcome": "game over at 1 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [
+      {
+        "step": 4,
+        "note": "Player fell off and triggered game over between turns despite landing with grounded:true and vx:0, vz:0 on a normal platform."
+      }
+    ],
+    "recording": "/recordings/skyhop/run-001-v1-1m.mp4"
+  },
+  {
+    "iteration": 2,
+    "version": 2,
+    "metric": 5,
+    "metricLabel": "steps",
+    "steps": 5,
+    "outcome": "game over at 0 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-002-v2.mp4"
+  },
+  {
+    "iteration": 3,
+    "version": 2,
+    "metric": 1,
+    "metricLabel": "m",
+    "steps": 4,
+    "outcome": "game over at 1 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-003-v2-1m.mp4"
+  },
+  {
+    "iteration": 4,
+    "version": 3,
+    "metric": 2,
+    "metricLabel": "m",
+    "steps": 4,
+    "outcome": "game over at 2 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-004-v3-2m.mp4"
+  },
+  {
+    "iteration": 5,
+    "version": 3,
+    "metric": 4,
+    "metricLabel": "m",
+    "steps": 7,
+    "outcome": "game over at 0 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [
+      {
+        "step": 7,
+        "note": "When status becomes 'over', no game-over overlay appears on screen and HUD height/gems immediately reset to 0."
+      }
+    ],
+    "recording": "/recordings/skyhop/run-005-v3-4m.mp4"
+  }
+]

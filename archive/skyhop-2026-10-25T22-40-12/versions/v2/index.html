@@ -1,0 +1,883 @@
+<title>Skyhop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Fredoka:wght@400;500;600&display=swap">
+<style>
+  /* Layout: full-bleed 3D canvas over an altitude-driven sky; HUD chips pinned to corners, touch pad bottom. */
+  :root {
+    --ink: #1d1838;
+    --paper: #fff8ef;
+    --chip: rgba(29, 24, 56, 0.55);
+    --sun: #ffcf4a;
+    --pink: #ff8fab;
+    --mint: #8fd3b6;
+    --display: "Bungee", "Arial Black", Impact, sans-serif;
+    --body: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background: #7eb6e6;
+    color: var(--paper);
+    font-family: var(--body);
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #sky { position: fixed; inset: 0; z-index: 0; background: linear-gradient(#7eb6e6, #fadec8); }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1; display: block; outline: none; }
+
+  .hud {
+    position: fixed; z-index: 2; display: flex; gap: 8px; align-items: flex-start;
+    top: calc(env(safe-area-inset-top, 0px) + 14px);
+    pointer-events: none;
+  }
+  .hud.left { left: calc(env(safe-area-inset-left, 0px) + 14px); flex-direction: column; }
+  .hud.right { right: calc(env(safe-area-inset-right, 0px) + 14px); }
+  .chip {
+    background: var(--chip); border-radius: 14px; padding: 8px 14px;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    font-variant-numeric: tabular-nums;
+  }
+  .height { font-family: var(--display); font-size: clamp(28px, 6vw, 44px); line-height: 1; letter-spacing: 0.02em; }
+  .height small { font-size: 0.45em; margin-left: 4px; opacity: 0.8; }
+  .zone { font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.85; margin-top: 4px; }
+  .row { display: flex; gap: 8px; }
+  .stat { font-size: 15px; font-weight: 600; }
+  .stat b { font-family: var(--display); font-weight: 400; color: var(--sun); margin-left: 4px; }
+  .gem b { color: var(--pink); }
+  #mute {
+    pointer-events: auto; cursor: pointer; border: 0; color: var(--paper); font: 600 14px var(--body);
+  }
+  #mute:focus-visible, .btn:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
+
+  .overlay {
+    position: fixed; inset: 0; z-index: 4; display: grid; place-items: center;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    background: rgba(29, 24, 56, 0.25);
+  }
+  .card {
+    background: var(--paper); color: var(--ink); border-radius: 22px;
+    padding: 28px 28px 24px; width: min(420px, 100%); text-align: center;
+    box-shadow: 0 18px 50px rgba(29, 24, 56, 0.35);
+    display: grid; gap: 14px;
+  }
+  .card h1 { margin: 0; font: 400 clamp(40px, 11vw, 60px)/0.95 var(--display); color: var(--ink); text-wrap: balance; }
+  .card h1 span { color: #e8577a; }
+  .card h2 { margin: 0; font: 400 30px/1 var(--display); text-wrap: balance; }
+  .card p { margin: 0; font-size: 16px; line-height: 1.45; color: #4a4466; }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; text-align: left; font-size: 14px; color: #4a4466; margin: 0 auto; }
+  kbd {
+    font: 600 12px var(--body); background: #efe6f7; color: var(--ink); border-radius: 6px;
+    padding: 2px 7px; border-bottom: 2px solid #cfc2e0; white-space: nowrap;
+  }
+  .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 12px; font-size: 13px; color: #4a4466; }
+  .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+  .btn {
+    font: 400 20px var(--display); letter-spacing: 0.04em; color: var(--ink);
+    background: var(--sun); border: 0; border-radius: 14px; padding: 14px 20px; cursor: pointer;
+    box-shadow: 0 5px 0 #d9a21c; transition: transform 0.08s, box-shadow 0.08s;
+  }
+  .btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #d9a21c; }
+  .final { display: flex; justify-content: center; gap: 24px; }
+  .final div { display: grid; gap: 2px; }
+  .final b { font: 400 34px var(--display); }
+  .final span { font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #7a7396; }
+  .newbest { color: #e8577a; font-weight: 600; }
+
+  .touch { display: none; }
+  @media (pointer: coarse) { .touch { display: block; } .desk { display: none; } }
+  #stick {
+    position: fixed; z-index: 3; width: 120px; height: 120px; border-radius: 50%;
+    left: calc(env(safe-area-inset-left, 0px) + 24px); bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+    background: rgba(29, 24, 56, 0.28); border: 2px solid rgba(255, 248, 239, 0.4);
+  }
+  #knob {
+    position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px;
+    border-radius: 50%; background: rgba(255, 248, 239, 0.85);
+  }
+  #jumpBtn {
+    position: fixed; z-index: 3; width: 96px; height: 96px; border-radius: 50%; border: 0;
+    right: calc(env(safe-area-inset-right, 0px) + 28px); bottom: calc(env(safe-area-inset-bottom, 0px) + 40px);
+    background: var(--sun); color: var(--ink); font: 400 15px var(--display);
+    box-shadow: 0 6px 0 #d9a21c;
+  }
+  #jumpBtn.down { transform: translateY(4px); box-shadow: 0 2px 0 #d9a21c; }
+</style>
+
+<div id="sky"></div>
+<canvas id="game" tabindex="0" aria-label="Skyhop game"></canvas>
+
+<div class="hud left">
+  <div class="chip">
+    <div class="height"><span id="hHeight">0</span><small>m</small></div>
+    <div class="zone" id="hZone">Low clouds</div>
+  </div>
+  <div class="row">
+    <div class="chip stat gem">Gems<b id="hGems">0</b></div>
+  </div>
+</div>
+<div class="hud right">
+  <div class="chip stat">Best<b id="hBest">0</b></div>
+  <button class="chip" id="mute" type="button" aria-pressed="false">Sound on</button>
+</div>
+
+<div class="touch" id="touchUi" hidden>
+  <div id="stick"><div id="knob"></div></div>
+  <button id="jumpBtn" type="button">Jump</button>
+</div>
+
+<div class="overlay" id="titleScreen">
+  <div class="card">
+    <h1>Sky<span>hop</span></h1>
+    <p>Climb the floating islands as high as you can. The sky darkens the higher you go.</p>
+    <div class="keys desk">
+      <kbd>WASD / Arrows</kbd><span>Move</span>
+      <kbd>Space</kbd><span>Jump (hold for higher)</span>
+      <kbd>Drag / Q E</kbd><span>Turn the camera</span>
+    </div>
+    <div class="keys touch">
+      <kbd>Left pad</kbd><span>Move</span>
+      <kbd>Jump</kbd><span>Hold for higher</span>
+      <kbd>Swipe</kbd><span>Turn the camera</span>
+    </div>
+    <div class="legend">
+      <span><i style="background:#8fd3b6"></i>Solid</span>
+      <span><i style="background:#b9a4f0"></i>Drifting</span>
+      <span><i style="background:#f2b880"></i>Crumbles</span>
+      <span><i style="background:#ff8fab"></i>Spring</span>
+    </div>
+    <button class="btn" id="playBtn" type="button">Play</button>
+  </div>
+</div>
+
+<div class="overlay" id="overScreen" hidden>
+  <div class="card">
+    <h2>You fell</h2>
+    <div class="final">
+      <div><b id="fHeight">0</b><span>Meters</span></div>
+      <div><b id="fGems">0</b><span>Gems</span></div>
+    </div>
+    <p id="fBest"></p>
+    <button class="btn" id="againBtn" type="button">Climb again</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+  // Tuning
+  const G = 32, JUMP = 12.5, SPRING = 22, SPEED = 7.2, CAM_DIST = 9.5, CAM_PITCH = 0.42;
+
+  // Playtest harness: ?harness in the URL hands the clock and input to window.skyhop.
+  let HARNESS = false;
+  try { HARNESS = new URLSearchParams(location.search).has("harness"); } catch (e) {}
+  const events = [];
+  const logEvent = (type, data) => { events.push(Object.assign({ type, t: +(performance.now() / 1000).toFixed(2) }, data || {})); if (events.length > 2000) events.shift(); };
+  if (HARNESS) {
+    window.addEventListener("error", (e) => logEvent("error", { message: String(e.message), line: e.lineno }));
+    const ce = console.error;
+    console.error = function () { logEvent("error", { message: Array.from(arguments).map(String).join(" ") }); ce.apply(console, arguments); };
+  }
+
+  // ---------- Storage ----------
+  function loadBest() { try { return parseInt(localStorage.getItem("skyhop-best") || "0", 10) || 0; } catch (e) { return 0; } }
+  function saveBest(v) { try { localStorage.setItem("skyhop-best", String(v)); } catch (e) {} }
+
+  function start(hotData) {
+    let best = Math.max(loadBest(), (hotData && hotData.best) || 0);
+    window.claude?.hot?.snapshot?.(() => ({ best }));
+
+    // ---------- Renderer ----------
+    const canvas = $("game");
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setClearColor(0x000000, 0);
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0xfadec8, 28, 80);
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 250);
+
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x9a86b8, 0.85);
+    const sun = new THREE.DirectionalLight(0xfff2dd, 0.8);
+    sun.position.set(6, 12, 4);
+    scene.add(hemi, sun, sun.target);
+
+    function resize() {
+      const w = window.innerWidth, h = window.innerHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.fov = w < h ? 72 : 60;
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    // ---------- Shared geometry & materials ----------
+    const mat = (c, extra) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.85, flatShading: true }, extra || {}));
+    const geoTop = new THREE.CylinderGeometry(1, 0.94, 0.4, 12);
+    const geoRock = new THREE.ConeGeometry(0.9, 1.1, 7);
+    const geoCoil = new THREE.TorusGeometry(0.42, 0.1, 6, 14);
+    const geoPad = new THREE.CylinderGeometry(0.5, 0.5, 0.12, 12);
+    const geoGem = new THREE.OctahedronGeometry(0.32, 0);
+    const geoBit = new THREE.BoxGeometry(0.14, 0.14, 0.14);
+    const geoCloud = new THREE.IcosahedronGeometry(1, 0);
+
+    const TYPES = {
+      normal: { top: mat(0x8fd3b6) },
+      moving: { top: mat(0xb9a4f0) },
+      crumble: { top: mat(0xf2b880) },
+      spring: { top: mat(0xff8fab) },
+      start: { top: mat(0xa8e0c6) },
+    };
+    const rockMat = mat(0x6e5d86);
+    const coilMat = mat(0xfff8ef, { roughness: 0.4 });
+    const gemMat = mat(0xff5f8f, { emissive: 0x6a1030, roughness: 0.3 });
+    const bitMat = mat(0xfff8ef);
+    const cloudMat = mat(0xffffff, { transparent: true, opacity: 0.85 });
+
+    // ---------- Player ----------
+    const player = new THREE.Group();
+    const body = new THREE.Group();
+    const cube = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), mat(0xffcf4a, { roughness: 0.6 }));
+    cube.position.y = 0.4;
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x1d1838 });
+    const eyeGeo = new THREE.BoxGeometry(0.1, 0.18, 0.04);
+    const eyeL = new THREE.Mesh(eyeGeo, eyeMat), eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+    eyeL.position.set(-0.17, 0.5, 0.41); eyeR.position.set(0.17, 0.5, 0.41);
+    const cheekMat = new THREE.MeshBasicMaterial({ color: 0xff8fab });
+    const cheekGeo = new THREE.BoxGeometry(0.12, 0.06, 0.03);
+    const chL = new THREE.Mesh(cheekGeo, cheekMat), chR = new THREE.Mesh(cheekGeo, cheekMat);
+    chL.position.set(-0.27, 0.36, 0.41); chR.position.set(0.27, 0.36, 0.41);
+    body.add(cube, eyeL, eyeR, chL, chR);
+    player.add(body);
+    scene.add(player);
+
+    const shadow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.45, 18),
+      new THREE.MeshBasicMaterial({ color: 0x1d1838, transparent: true, opacity: 0.3, depthWrite: false })
+    );
+    shadow.rotation.x = -Math.PI / 2;
+    scene.add(shadow);
+
+    // ---------- Particles ----------
+    const bits = [];
+    for (let i = 0; i < 48; i++) {
+      const m = new THREE.Mesh(geoBit, bitMat);
+      m.visible = false; scene.add(m);
+      bits.push({ m, life: 0, vx: 0, vy: 0, vz: 0 });
+    }
+    let bitIdx = 0;
+    function burst(x, y, z, n, power) {
+      for (let i = 0; i < n; i++) {
+        const b = bits[bitIdx++ % bits.length];
+        const a = Math.random() * Math.PI * 2;
+        b.m.position.set(x, y + 0.05, z);
+        b.vx = Math.cos(a) * rand(1.5, 3.5) * power; b.vz = Math.sin(a) * rand(1.5, 3.5) * power;
+        b.vy = rand(2, 4.5) * power; b.life = rand(0.35, 0.6); b.m.visible = true;
+      }
+    }
+
+    // ---------- Clouds & stars ----------
+    const clouds = [];
+    for (let i = 0; i < 26; i++) {
+      const g = new THREE.Group();
+      const n = 3 + (Math.random() * 3 | 0);
+      for (let k = 0; k < n; k++) {
+        const s = new THREE.Mesh(geoCloud, cloudMat);
+        const r = rand(0.9, 1.8);
+        s.scale.set(r * 1.3, r * 0.75, r);
+        s.position.set(k * 1.4 - n * 0.7 + rand(-0.3, 0.3), rand(-0.3, 0.4), rand(-0.6, 0.6));
+        g.add(s);
+      }
+      scene.add(g);
+      clouds.push(g);
+    }
+    function placeCloud(g, baseY) {
+      const a = Math.random() * Math.PI * 2, d = rand(18, 42);
+      g.position.set(Math.cos(a) * d, baseY + rand(-25, 55), Math.sin(a) * d);
+      g.rotation.y = Math.random() * Math.PI;
+      g.userData.drift = rand(0.2, 0.6);
+    }
+
+    const starGeo = new THREE.BufferGeometry();
+    const starPos = new Float32Array(900 * 3);
+    for (let i = 0; i < 900; i++) {
+      const u = Math.random() * 2 - 1, t = Math.random() * Math.PI * 2, r = 120;
+      const s = Math.sqrt(1 - u * u);
+      starPos[i * 3] = Math.cos(t) * s * r; starPos[i * 3 + 1] = Math.abs(u) * r * 0.9 - 10; starPos[i * 3 + 2] = Math.sin(t) * s * r;
+    }
+    starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
+    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.7, transparent: true, opacity: 0, fog: false, depthWrite: false });
+    const stars = new THREE.Points(starGeo, starMat);
+    scene.add(stars);
+
+    // ---------- Sky by altitude ----------
+    const SKY = [
+      { h: 0,   top: [126, 182, 230], bot: [250, 222, 200], zone: "Low clouds" },
+      { h: 70,  top: [92, 118, 200],  bot: [255, 176, 140], zone: "Sunset band" },
+      { h: 150, top: [58, 46, 110],   bot: [232, 120, 110], zone: "Dusk" },
+      { h: 260, top: [14, 12, 40],    bot: [60, 38, 100],   zone: "Night sky" },
+      { h: 400, top: [2, 2, 10],      bot: [16, 14, 44],    zone: "Edge of space" },
+    ];
+    const skyEl = $("sky");
+    let lastSkyKey = "";
+    function applySky(h) {
+      let i = 0;
+      while (i < SKY.length - 2 && h > SKY[i + 1].h) i++;
+      const a = SKY[i], b = SKY[i + 1];
+      const t = clamp((h - a.h) / (b.h - a.h), 0, 1);
+      const top = a.top.map((v, k) => Math.round(lerp(v, b.top[k], t)));
+      const bot = a.bot.map((v, k) => Math.round(lerp(v, b.bot[k], t)));
+      const key = top.join() + bot.join();
+      if (key !== lastSkyKey) {
+        lastSkyKey = key;
+        skyEl.style.background = `linear-gradient(rgb(${top}), rgb(${bot}))`;
+        document.body.style.background = `rgb(${bot})`;
+        scene.fog.color.setRGB(bot[0] / 255, bot[1] / 255, bot[2] / 255);
+      }
+      const night = smooth(140, 300, h);
+      starMat.opacity = night;
+      hemi.intensity = lerp(0.85, 0.5, night);
+      sun.intensity = lerp(0.8, 0.45, night);
+      cloudMat.opacity = lerp(0.85, 0.25, night);
+      let z = SKY[0].zone;
+      for (const s of SKY) if (h >= s.h) z = s.zone;
+      return z;
+    }
+
+    // ---------- Platforms ----------
+    let platforms = [];
+    let gen = null;
+    let nextId = 0;
+
+    function makePlatform(x, y, z, r, type) {
+      const g = new THREE.Group();
+      const top = new THREE.Mesh(geoTop, TYPES[type].top);
+      top.scale.set(r, 1, r); top.position.y = -0.2;
+      const rock = new THREE.Mesh(geoRock, rockMat);
+      rock.scale.set(r, r, r); rock.rotation.x = Math.PI; rock.position.y = -0.4 - r * 0.55;
+      rock.rotation.y = Math.random() * 3;
+      g.add(top, rock);
+      const pl = {
+        id: nextId++, g, x, y, z, baseX: x, baseZ: z, r, type, active: true,
+        t: Math.random() * 6, speed: rand(0.9, 1.5), amp: 0, ax: 0, az: 0, dx: 0, dz: 0,
+        crumbleT: -1, vy: 0, gem: null, pad: null,
+      };
+      if (type === "spring") {
+        const coil = new THREE.Mesh(geoCoil, coilMat);
+        coil.rotation.x = Math.PI / 2; coil.position.y = 0.1;
+        const pad = new THREE.Mesh(geoPad, TYPES.spring.top);
+        pad.position.y = 0.24;
+        g.add(coil, pad);
+        pl.pad = pad;
+      }
+      g.position.set(x, y, z);
+      scene.add(g);
+      platforms.push(pl);
+      return pl;
+    }
+
+    function nextPlatform() {
+      const prev = gen.last;
+      const diff = clamp(prev.y / 260, 0, 1);
+      let type = "normal";
+      const roll = Math.random();
+      const pSpring = 0.07, pMove = 0.1 + 0.22 * diff, pCrumble = 0.05 + 0.2 * diff;
+      if (prev.type !== "spring" && gen.count > 3) {
+        if (roll < pSpring) type = "spring";
+        else if (roll < pSpring + pMove) type = "moving";
+        else if (roll < pSpring + pMove + pCrumble) type = "crumble";
+      }
+      const r = Math.max(0.85, rand(1.15, 1.65) - diff * 0.45);
+      let up, gap;
+      if (prev.type === "spring") { up = rand(4.5, 6); gap = rand(0.5, 1.6); }
+      else { up = rand(0.5, 1.15 + 0.5 * diff); gap = rand(0.7, 2.6 + 0.8 * diff - up * 0.5); }
+      const dist = prev.r + r + gap;
+      gen.ang += rand(-1.3, 1.3);
+      let nx = prev.x + Math.cos(gen.ang) * dist, nz = prev.z + Math.sin(gen.ang) * dist;
+      if (Math.hypot(nx, nz) > 11) {
+        gen.ang = Math.atan2(-prev.z, -prev.x) + rand(-0.7, 0.7);
+        nx = prev.x + Math.cos(gen.ang) * dist; nz = prev.z + Math.sin(gen.ang) * dist;
+      }
+      const pl = makePlatform(nx, prev.y + up, nz, r, type);
+      if (type === "moving") {
+        // Drift sideways to the approach so the gap stays fair.
+        pl.ax = -Math.sin(gen.ang); pl.az = Math.cos(gen.ang); pl.amp = rand(1.2, 2.2);
+      }
+      if (type !== "spring" && Math.random() < 0.3) {
+        const gm = new THREE.Mesh(geoGem, gemMat);
+        gm.position.y = 1.1;
+        pl.g.add(gm); pl.gem = gm;
+      }
+      gen.last = pl; gen.count++;
+    }
+
+    // ---------- State ----------
+    const p = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, ground: null, coyote: 0, buffer: 0, springing: false, face: 0, sq: 1 };
+    let state = "title", gems = 0, maxY = 0, yaw = 0.6;
+    const cam = { x: 0, y: 2, z: 0 };
+
+    function reset() {
+      for (const pl of platforms) scene.remove(pl.g);
+      platforms = [];
+      const s = makePlatform(0, 0, 0, 2.6, "start");
+      gen = { last: s, ang: Math.random() * Math.PI * 2, count: 0 };
+      while (gen.last.y < 45) nextPlatform();
+      Object.assign(p, { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, ground: s, coyote: 0, buffer: 0, springing: false, sq: 1 });
+      gems = 0; maxY = 0;
+      cam.x = 0; cam.y = 2; cam.z = 0;
+      for (const c of clouds) placeCloud(c, 0);
+      updateHud();
+    }
+
+    // ---------- HUD ----------
+    const hHeight = $("hHeight"), hGems = $("hGems"), hBest = $("hBest"), hZone = $("hZone");
+    let shownH = -1, shownZone = "";
+    function updateHud(zone) {
+      const h = Math.floor(maxY);
+      if (h !== shownH) { shownH = h; hHeight.textContent = h; }
+      hGems.textContent = gems;
+      hBest.textContent = best;
+      if (zone && zone !== shownZone) { shownZone = zone; hZone.textContent = zone; }
+    }
+
+    // ---------- Audio ----------
+    let actx = null, muted = false;
+    function ensureAudio() {
+      if (actx) { if (actx.state === "suspended") actx.resume(); return; }
+      try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; }
+    }
+    function tone(f1, f2, dur, type, vol) {
+      if (!actx || muted) return;
+      const t = actx.currentTime;
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = type || "square";
+      o.frequency.setValueAtTime(f1, t);
+      o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+      g.gain.setValueAtTime(vol || 0.06, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(actx.destination);
+      o.start(t); o.stop(t + dur + 0.02);
+    }
+    const sfx = {
+      jump: () => tone(320, 640, 0.14, "square", 0.045),
+      land: () => tone(160, 70, 0.09, "triangle", 0.12),
+      spring: () => tone(260, 1200, 0.32, "sawtooth", 0.04),
+      gem: () => { tone(880, 880, 0.08, "triangle", 0.09); setTimeout(() => tone(1320, 1320, 0.14, "triangle", 0.09), 70); },
+      crack: () => tone(500, 90, 0.25, "sawtooth", 0.035),
+      fall: () => tone(500, 60, 0.7, "triangle", 0.1),
+    };
+    const muteBtn = $("mute");
+    muteBtn.addEventListener("click", () => {
+      muted = !muted;
+      muteBtn.textContent = muted ? "Sound off" : "Sound on";
+      muteBtn.setAttribute("aria-pressed", String(muted));
+      canvas.focus();
+    });
+
+    // ---------- Input ----------
+    const keys = { f: 0, b: 0, l: 0, r: 0, q: 0, e: 0, jumpHeld: false };
+    const joy = { x: 0, y: 0 };
+    const KEYMAP = { KeyW: "f", ArrowUp: "f", KeyS: "b", ArrowDown: "b", KeyA: "l", ArrowLeft: "l", KeyD: "r", ArrowRight: "r", KeyQ: "q", KeyE: "e" };
+
+    function pressJump() {
+      ensureAudio();
+      if (state !== "play") { startGame(); return; }
+      p.buffer = 0.13; keys.jumpHeld = true;
+    }
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Space" || e.code === "Enter") {
+        if (e.target && e.target.tagName === "BUTTON" && e.code === "Enter") return;
+        e.preventDefault();
+        if (!e.repeat) pressJump();
+        return;
+      }
+      const k = KEYMAP[e.code];
+      if (k) { keys[k] = 1; e.preventDefault(); }
+    });
+    window.addEventListener("keyup", (e) => {
+      if (e.code === "Space") keys.jumpHeld = false;
+      const k = KEYMAP[e.code];
+      if (k) keys[k] = 0;
+    });
+    window.addEventListener("blur", () => { for (const k in keys) keys[k] = typeof keys[k] === "boolean" ? false : 0; });
+
+    // Drag to orbit the camera
+    let dragId = null, dragX = 0;
+    canvas.addEventListener("pointerdown", (e) => {
+      ensureAudio();
+      dragId = e.pointerId; dragX = e.clientX;
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      if (e.pointerId !== dragId) return;
+      yaw -= (e.clientX - dragX) * 0.007;
+      dragX = e.clientX;
+    });
+    const endDrag = (e) => { if (e.pointerId === dragId) dragId = null; };
+    canvas.addEventListener("pointerup", endDrag);
+    canvas.addEventListener("pointercancel", endDrag);
+
+    // Touch controls
+    const isTouch = window.matchMedia("(pointer: coarse)").matches || "ontouchstart" in window;
+    const touchUi = $("touchUi"), stick = $("stick"), knob = $("knob"), jumpBtn = $("jumpBtn");
+    let stickId = null;
+    function moveStick(e) {
+      const rc = stick.getBoundingClientRect();
+      let dx = e.clientX - (rc.left + rc.width / 2), dy = e.clientY - (rc.top + rc.height / 2);
+      const len = Math.hypot(dx, dy), max = rc.width / 2 - 10;
+      if (len > max) { dx *= max / len; dy *= max / len; }
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      joy.x = dx / max; joy.y = -dy / max;
+    }
+    stick.addEventListener("pointerdown", (e) => {
+      ensureAudio(); stickId = e.pointerId;
+      try { stick.setPointerCapture(e.pointerId); } catch (err) {}
+      moveStick(e);
+    });
+    stick.addEventListener("pointermove", (e) => { if (e.pointerId === stickId) moveStick(e); });
+    const endStick = (e) => {
+      if (e.pointerId !== stickId) return;
+      stickId = null; joy.x = joy.y = 0; knob.style.transform = "";
+    };
+    stick.addEventListener("pointerup", endStick);
+    stick.addEventListener("pointercancel", endStick);
+    jumpBtn.addEventListener("pointerdown", (e) => { e.preventDefault(); jumpBtn.classList.add("down"); pressJump(); });
+    const endJump = () => { jumpBtn.classList.remove("down"); keys.jumpHeld = false; };
+    jumpBtn.addEventListener("pointerup", endJump);
+    jumpBtn.addEventListener("pointercancel", endJump);
+    jumpBtn.addEventListener("pointerleave", endJump);
+
+    // ---------- Screens ----------
+    const titleScreen = $("titleScreen"), overScreen = $("overScreen");
+    function startGame() {
+      ensureAudio();
+      reset();
+      state = "play";
+      titleScreen.hidden = true; overScreen.hidden = true;
+      touchUi.hidden = !isTouch;
+      canvas.focus();
+    }
+    function gameOver() {
+      state = "over";
+      logEvent("death", { height: Math.floor(maxY), y: +p.y.toFixed(2), lastGround: lastGroundType, gems });
+      sfx.fall();
+      const h = Math.floor(maxY);
+      const isBest = h > best;
+      if (isBest) { best = h; saveBest(best); }
+      $("fHeight").textContent = h;
+      $("fGems").textContent = gems;
+      const fBest = $("fBest");
+      fBest.textContent = isBest ? "New personal best!" : `Your best is ${best} m.`;
+      fBest.className = isBest ? "newbest" : "";
+      updateHud();
+      touchUi.hidden = true;
+      if (!HARNESS) setTimeout(() => { if (state === "over") { overScreen.hidden = false; $("againBtn").focus(); } }, 650);
+    }
+    $("playBtn").addEventListener("click", startGame);
+    $("againBtn").addEventListener("click", startGame);
+
+    // ---------- Update ----------
+    function updatePlatforms(dt) {
+      for (const pl of platforms) {
+        pl.dx = pl.dz = 0;
+        if (pl.type === "moving" && pl.active) {
+          pl.t += dt * pl.speed;
+          const off = Math.sin(pl.t) * pl.amp;
+          const nx = pl.baseX + pl.ax * off, nz = pl.baseZ + pl.az * off;
+          pl.dx = nx - pl.x; pl.dz = nz - pl.z; pl.x = nx; pl.z = nz;
+          pl.g.position.x = nx; pl.g.position.z = nz;
+        }
+        if (pl.crumbleT >= 0) {
+          pl.crumbleT += dt;
+          if (!pl.falling) {
+            pl.g.position.x = pl.x + rand(-0.06, 0.06);
+            pl.g.position.z = pl.z + rand(-0.06, 0.06);
+            if (pl.crumbleT > 0.55) { pl.falling = true; pl.active = false; sfx.crack(); burst(pl.x, pl.y, pl.z, 10, 0.8); }
+          } else {
+            pl.vy -= 30 * dt; pl.fallY = (pl.fallY ?? pl.y) + pl.vy * dt;
+            pl.g.position.y = pl.fallY;
+            pl.g.rotation.z += dt * 0.8;
+          }
+        }
+        if (pl.pad) pl.pad.position.y = lerp(pl.pad.position.y, 0.24, Math.min(1, dt * 10));
+        if (pl.gem) { pl.gem.rotation.y += dt * 2; pl.gem.position.y = 1.1 + Math.sin(pl.t * 2 + performance.now() / 400) * 0.1; }
+      }
+      // Recycle far-below platforms
+      const cutoff = p.y - 30;
+      platforms = platforms.filter((pl) => {
+        if (pl.y < cutoff && pl !== gen.last) { scene.remove(pl.g); return false; }
+        return true;
+      });
+      while (gen.last.y < p.y + 45) nextPlatform();
+    }
+
+    let lastGroundType = "start";
+    function land(pl) {
+      p.y = pl.y; p.vy = 0; p.springing = false;
+      lastGroundType = pl.type;
+      logEvent("land", { platform: pl.id, kind: pl.type, y: +pl.y.toFixed(2) });
+      if (pl.type === "spring") {
+        p.vy = SPRING; p.springing = true; p.sq = 0.55;
+        if (pl.pad) pl.pad.position.y = 0.05;
+        sfx.spring(); burst(pl.x, pl.y, pl.z, 12, 1.2);
+        maxY = Math.max(maxY, pl.y);
+        return;
+      }
+      p.ground = pl; p.sq = 0.7;
+      maxY = Math.max(maxY, pl.y);
+      sfx.land(); burst(p.x, pl.y, p.z, 6, 0.6);
+      if (pl.type === "crumble" && pl.crumbleT < 0) pl.crumbleT = 0;
+    }
+
+    function updatePlayer(dt) {
+      yaw += (keys.e - keys.q) * dt * 2.2;
+      let ix = keys.r - keys.l + joy.x, iy = keys.f - keys.b + joy.y;
+      const il = Math.hypot(ix, iy);
+      if (il > 1) { ix /= il; iy /= il; }
+      const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+      let tvx = (fx * iy + rx * ix) * SPEED, tvz = (fz * iy + rz * ix) * SPEED;
+      if (harnessInput) {
+        // World-space direction from the playtest bot
+        let wx = harnessInput.x || 0, wz = harnessInput.z || 0;
+        const wl = Math.hypot(wx, wz);
+        if (wl > 1) { wx /= wl; wz /= wl; }
+        tvx = wx * SPEED; tvz = wz * SPEED;
+      }
+      const acc = (p.ground ? 55 : 28) * dt;
+      p.vx += clamp(tvx - p.vx, -acc, acc);
+      p.vz += clamp(tvz - p.vz, -acc, acc);
+
+      if (p.ground) { p.x += p.ground.dx; p.z += p.ground.dz; p.coyote = 0.1; }
+      else p.coyote -= dt;
+      p.buffer -= dt;
+
+      if (p.buffer > 0 && p.coyote > 0) {
+        p.vy = JUMP; p.ground = null; p.coyote = 0; p.buffer = 0; p.sq = 1.35; p.springing = false;
+        sfx.jump();
+        logEvent("jump", { y: +p.y.toFixed(2) });
+      }
+
+      if (!p.ground) {
+        p.vy -= G * dt;
+        if (!keys.jumpHeld && p.vy > 0 && !p.springing) p.vy -= G * 1.4 * dt;
+        p.vy = Math.max(p.vy, -30);
+      }
+
+      const prevY = p.y;
+      p.x += p.vx * dt; p.z += p.vz * dt; p.y += p.vy * dt;
+
+      if (p.ground) {
+        const g = p.ground;
+        if (!g.active || Math.hypot(p.x - g.x, p.z - g.z) > g.r + 0.2) p.ground = null;
+        else p.y = g.y;
+      } else if (p.vy <= 0) {
+        let hit = null;
+        for (const pl of platforms) {
+          if (!pl.active) continue;
+          if (prevY >= pl.y - 0.02 && p.y <= pl.y && Math.hypot(p.x - pl.x, p.z - pl.z) < pl.r + 0.25) {
+            if (!hit || pl.y > hit.y) hit = pl;
+          }
+        }
+        if (hit) land(hit);
+      }
+
+      // Gems
+      for (const pl of platforms) {
+        if (!pl.gem) continue;
+        const gy = pl.y + pl.gem.position.y;
+        if (Math.hypot(p.x - pl.x, p.y + 0.4 - gy, p.z - pl.z) < 0.95) {
+          const gemH = pl.gem.position.y;
+          pl.g.remove(pl.gem); pl.gem = null; gems++;
+          logEvent("gem", { platform: pl.id, total: gems, height: gemH });
+          sfx.gem(); burst(pl.x, gy - 0.1, pl.z, 10, 0.9);
+        }
+      }
+
+      if (p.y < maxY - 16) gameOver();
+    }
+
+    function updateVisuals(dt, time) {
+      player.position.set(p.x, p.y, p.z);
+      const sp = Math.hypot(p.vx, p.vz);
+      if (sp > 0.6) {
+        const target = Math.atan2(p.vx, p.vz);
+        let d = target - p.face;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        p.face += d * Math.min(1, dt * 12);
+      }
+      player.rotation.y = p.face;
+      p.sq = lerp(p.sq, 1, Math.min(1, dt * 9));
+      body.scale.set(1 / Math.sqrt(p.sq), p.sq, 1 / Math.sqrt(p.sq));
+      // Little forward lean when running, tumble when springing
+      body.rotation.x = p.springing ? body.rotation.x + dt * 9 : lerp(body.rotation.x % (Math.PI * 2), sp / SPEED * 0.15, Math.min(1, dt * 10));
+
+      // Blob shadow onto the highest platform underneath
+      let below = null;
+      for (const pl of platforms) {
+        if (!pl.active || pl.y > p.y + 0.01) continue;
+        if (Math.hypot(p.x - pl.x, p.z - pl.z) < pl.r) { if (!below || pl.y > below.y) below = pl; }
+      }
+      if (below) {
+        const h = p.y - below.y;
+        shadow.visible = true;
+        shadow.position.set(p.x, below.y + 0.02, p.z);
+        const s = clamp(1 - h * 0.08, 0.35, 1);
+        shadow.scale.set(s, s, s);
+        shadow.material.opacity = 0.32 * s;
+      } else shadow.visible = false;
+
+      for (const b of bits) {
+        if (b.life <= 0) continue;
+        b.life -= dt;
+        b.vy -= 18 * dt;
+        b.m.position.x += b.vx * dt; b.m.position.y += b.vy * dt; b.m.position.z += b.vz * dt;
+        b.m.rotation.x += dt * 8; b.m.rotation.y += dt * 6;
+        const s = Math.max(0.01, b.life * 2);
+        b.m.scale.set(s, s, s);
+        if (b.life <= 0) b.m.visible = false;
+      }
+
+      for (const c of clouds) {
+        c.position.x += c.userData.drift * dt;
+        if (c.position.y < p.y - 35 || c.position.y > p.y + 70) placeCloud(c, p.y + 20);
+      }
+
+      // Camera
+      const k = Math.min(1, dt * 6);
+      cam.x = lerp(cam.x, p.x, k); cam.z = lerp(cam.z, p.z, k);
+      cam.y = lerp(cam.y, p.y + 0.8, Math.min(1, dt * (p.vy < -8 ? 2.5 : 4)));
+      const cp = Math.cos(CAM_PITCH), spch = Math.sin(CAM_PITCH);
+      camera.position.set(cam.x + Math.sin(yaw) * cp * CAM_DIST, cam.y + spch * CAM_DIST, cam.z + Math.cos(yaw) * cp * CAM_DIST);
+      camera.lookAt(cam.x, cam.y + 0.6, cam.z);
+      stars.position.copy(camera.position);
+      sun.position.set(p.x + 6, p.y + 12, p.z + 4);
+      sun.target.position.set(p.x, p.y, p.z);
+
+      const zone = applySky(Math.max(0, p.y));
+      updateHud(zone);
+    }
+
+    // ---------- Loop ----------
+    let harnessInput = null;
+    function simulate(dt, now) {
+      if (state === "play") {
+        updatePlatforms(dt);
+        updatePlayer(dt);
+      } else {
+        updatePlatforms(dt);
+        if (state === "title") yaw += dt * 0.25;
+        if (state === "over") { p.vy -= G * dt; p.y += p.vy * dt; p.vy = Math.max(p.vy, -30); }
+      }
+      updateVisuals(dt, now);
+      if (!Number.isFinite(p.x + p.y + p.z + p.vx + p.vy + p.vz)) logEvent("anomaly", { kind: "non-finite player state" });
+    }
+
+    let last = performance.now();
+    function frame(now) {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      if (!HARNESS) simulate(dt, now);
+      renderer.render(scene, camera);
+      requestAnimationFrame(frame);
+    }
+
+    function snapshotState() {
+      const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+      const near = platforms
+        .filter((pl) => pl.y > p.y - 6 && pl.y < p.y + 9)
+        .map((pl) => ({
+          id: pl.id, kind: pl.type, active: pl.active, crumbling: pl.crumbleT >= 0,
+          dx: +(pl.x - p.x).toFixed(2), dy: +(pl.y - p.y).toFixed(2), dz: +(pl.z - p.z).toFixed(2),
+          // Camera-relative: W/Up moves toward +ahead, D/Right toward +right
+          ahead: +((pl.x - p.x) * fx + (pl.z - p.z) * fz).toFixed(2), right: +((pl.x - p.x) * rx + (pl.z - p.z) * rz).toFixed(2),
+          radius: +pl.r.toFixed(2), gem: !!pl.gem, standingOn: p.ground === pl,
+        }))
+        .sort((a, b) => a.dy - b.dy);
+      return {
+        status: state,
+        player: { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), vx: +p.vx.toFixed(2), vy: +p.vy.toFixed(2), vz: +p.vz.toFixed(2) },
+        grounded: !!p.ground, groundKind: p.ground ? p.ground.type : null,
+        height: Math.floor(maxY), gems, platforms: near,
+        controls: "W/S or Up/Down move along ahead, A/D or Left/Right along right, Space jumps (hold for higher), Space or Enter starts and restarts",
+      };
+    }
+    // Generic playtest hook: any lab can read the game state without the harness
+    window.playtest = { getState: snapshotState, events: () => events.slice(-60) };
+
+    if (HARNESS) {
+      titleScreen.hidden = true;
+      window.skyhop = {
+        harnessVersion: 1,
+        physics: { gravity: G, jumpVelocity: JUMP, springVelocity: SPRING, runSpeed: SPEED },
+        reset() { startGame(); touchUi.hidden = true; events.length = 0; return snapshotState(); },
+        getState: snapshotState,
+        events: () => events.slice(),
+        // input: { x, z } world-space direction, jump: press at start, hold: keep jump held
+        step(input, seconds, speed) {
+          input = input || {};
+          const total = clamp(Number(seconds) || 0.3, 0.05, 3);
+          const sub = Math.max(1, Math.round(speed || 1));
+          const from = events.length;
+          harnessInput = { x: input.x || 0, z: input.z || 0 };
+          if (input.jump) p.buffer = 0.13;
+          keys.jumpHeld = !!input.hold || !!input.jump;
+          let left = total;
+          return new Promise((resolve) => {
+            const tick = () => {
+              for (let i = 0; i < sub && left > 0; i++) {
+                simulate(1 / 60, performance.now());
+                left -= 1 / 60;
+                if (state !== "play") left = 0;
+              }
+              if (left > 0) return requestAnimationFrame(tick);
+              harnessInput = null; keys.jumpHeld = false;
+              resolve({ events: events.slice(from), state: snapshotState() });
+            };
+            requestAnimationFrame(tick);
+          });
+        },
+        screenshot(width) {
+          renderer.render(scene, camera);
+          const w = width || 384, h = Math.round(w * canvas.height / canvas.width);
+          const c = document.createElement("canvas");
+          c.width = w; c.height = h;
+          const ctx = c.getContext("2d");
+          ctx.drawImage(gradientCanvas(w, h), 0, 0);
+          ctx.drawImage(canvas, 0, 0, w, h);
+          return c.toDataURL("image/jpeg", 0.7);
+        },
+      };
+      function gradientCanvas(w, h) {
+        // Paint the CSS sky behind the transparent WebGL frame
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        const ctx = c.getContext("2d");
+        const m = (skyEl.style.background || "").match(/rgb\([^)]*\)/g) || ["rgb(126,182,230)", "rgb(250,222,200)"];
+        const gr = ctx.createLinearGradient(0, 0, 0, h);
+        gr.addColorStop(0, m[0]); gr.addColorStop(1, m[1] || m[0]);
+        ctx.fillStyle = gr; ctx.fillRect(0, 0, w, h);
+        return c;
+      }
+    }
+
+    reset();
+    updateHud("Low clouds");
+    requestAnimationFrame(frame);
+    if (HARNESS) window.parent?.postMessage({ type: "skyhop-ready" }, "*");
+  }
+
+  if (!window.THREE) {
+    document.querySelector("#titleScreen p").textContent = "The 3D engine didn't load. Check your connection and reload the page.";
+    return;
+  }
+  window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>

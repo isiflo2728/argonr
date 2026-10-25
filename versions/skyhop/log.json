@@ -1,0 +1,102 @@
+[
+  {
+    "version": 1,
+    "parent": null,
+    "iteration": 0,
+    "summary": "Original build",
+    "bugs": [],
+    "edits": [],
+    "createdAt": "2026-10-25T22:50:45.598Z"
+  },
+  {
+    "version": 2,
+    "parent": 1,
+    "iteration": 1,
+    "summary": "Fixed the gem collection crash that froze the game loop, plus the height HUD freeze above 9m, weak spring pads, and crumbling platforms staying solid after falling.",
+    "bugs": [
+      {
+        "title": "Collecting a gem crashes the game loop with TypeError: Cannot read properties of null (reading 'position')",
+        "evidence": "At 0:42 (step 7), jumping into the gem on platform 79 throws `Cannot read properties of null (reading 'position')` because `pl.gem = null` is executed before reading `pl.gem.position.y` in `logEvent`. This halts `frame()` before `updateVisuals()`/`updateHud()` and freezes the game completely.",
+        "severity": "high"
+      },
+      {
+        "title": "Height HUD stops updating at 10m or above",
+        "evidence": "In `updateHud()`, `if (h !== shownH && h < 10)` prevents `hHeight.textContent` from updating once the player reaches 10 meters.",
+        "severity": "high"
+      },
+      {
+        "title": "Spring platforms launch with weak velocity (JUMP * 0.4) instead of SPRING",
+        "evidence": "In `land()`, landing on a `spring` platform sets `p.vy = JUMP * 0.4` (5.0, max height ~0.39m) instead of the defined `SPRING` constant (22), making the 4.5-6m upward gap after a spring impossible to clear.",
+        "severity": "high"
+      },
+      {
+        "title": "Crumbling platforms remain solid after breaking and falling away",
+        "evidence": "In `updatePlatforms()`, when `pl.crumbleT > 0.55` sets `pl.falling = true`, `pl.active` is never set to `false`, so the player continues standing on or landing on the original `pl.y` in mid-air.",
+        "severity": "high"
+      },
+      {
+        "title": "Not a bug: Missed jump in step 2 and game over overlay delay",
+        "evidence": "At 0:08-0:12 (steps 2-3), jumping off the start platform in the wrong direction caused a fall; the game over screen has a 650ms delay before appearing (visible at 0:12).",
+        "severity": "low"
+      }
+    ],
+    "edits": [
+      {
+        "file": "index.html",
+        "find": "      // Gems\n      for (const pl of platforms) {\n        if (!pl.gem) continue;\n        const gy = pl.y + pl.gem.position.y;\n        if (Math.hypot(p.x - pl.x, p.y + 0.4 - gy, p.z - pl.z) < 0.95) {\n          pl.g.remove(pl.gem); pl.gem = null; gems++;\n          logEvent(\"gem\", { platform: pl.id, total: gems, height: pl.gem.position.y });\n          sfx.gem(); burst(pl.x, gy - 0.1, pl.z, 10, 0.9);\n        }\n      }",
+        "replace": "      // Gems\n      for (const pl of platforms) {\n        if (!pl.gem) continue;\n        const gy = pl.y + pl.gem.position.y;\n        if (Math.hypot(p.x - pl.x, p.y + 0.4 - gy, p.z - pl.z) < 0.95) {\n          const gemH = pl.gem.position.y;\n          pl.g.remove(pl.gem); pl.gem = null; gems++;\n          logEvent(\"gem\", { platform: pl.id, total: gems, height: gemH });\n          sfx.gem(); burst(pl.x, gy - 0.1, pl.z, 10, 0.9);\n        }\n      }",
+        "why": "Fix: Read gem height before setting pl.gem to null so collecting a gem does not throw a TypeError and freeze the game loop."
+      },
+      {
+        "file": "index.html",
+        "find": "      if (h !== shownH && h < 10) { shownH = h; hHeight.textContent = h; }",
+        "replace": "      if (h !== shownH) { shownH = h; hHeight.textContent = h; }",
+        "why": "Fix: Update the height HUD at all altitudes instead of stopping at 10m."
+      },
+      {
+        "file": "index.html",
+        "find": "      if (pl.type === \"spring\") {\n        p.vy = JUMP * 0.4; p.springing = true; p.sq = 0.55;",
+        "replace": "      if (pl.type === \"spring\") {\n        p.vy = SPRING; p.springing = true; p.sq = 0.55;",
+        "why": "Fix: Use the SPRING velocity constant when bouncing on a spring platform instead of JUMP * 0.4."
+      },
+      {
+        "file": "index.html",
+        "find": "            if (pl.crumbleT > 0.55) { pl.falling = true; sfx.crack(); burst(pl.x, pl.y, pl.z, 10, 0.8); }",
+        "replace": "            if (pl.crumbleT > 0.55) { pl.falling = true; pl.active = false; sfx.crack(); burst(pl.x, pl.y, pl.z, 10, 0.8); }",
+        "why": "Fix: Mark crumbling platforms inactive when they break and fall so they no longer support the player in mid-air."
+      }
+    ],
+    "skipped": [],
+    "watchedRecording": true,
+    "createdAt": "2026-10-25T22:52:09.368Z"
+  },
+  {
+    "version": 3,
+    "parent": 2,
+    "iteration": 2,
+    "summary": "Fixed the player character facing backward opposite to its movement direction.",
+    "bugs": [
+      {
+        "title": "Player character faces backward opposite to movement direction",
+        "evidence": "At 0:40-0:47, the player jumps forward away from the camera toward the next platforms, and the character's eyes and cheeks turn to face backward toward the camera instead of the direction of travel because target yaw uses Math.atan2(-p.vx, -p.vz) while the face meshes are on local +Z (z = 0.41).",
+        "severity": "medium"
+      },
+      {
+        "title": "Not a bug: Player missed jumps at 0:29 and 0:58",
+        "evidence": "At 0:29 and 0:58 the player jumped off the platforms into open air and fell to game over due to playtest input choices.",
+        "severity": "low"
+      }
+    ],
+    "edits": [
+      {
+        "file": "index.html",
+        "find": "        const target = Math.atan2(-p.vx, -p.vz);",
+        "replace": "        const target = Math.atan2(p.vx, p.vz);",
+        "why": "Fix: Rotate the player's local +Z face toward the velocity vector (p.vx, p.vz) instead of opposite to it."
+      }
+    ],
+    "skipped": [],
+    "watchedRecording": true,
+    "createdAt": "2026-10-25T22:53:39.166Z"
+  }
+]

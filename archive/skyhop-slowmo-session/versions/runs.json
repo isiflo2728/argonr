@@ -1,0 +1,78 @@
+[
+  {
+    "iteration": 1,
+    "version": 1,
+    "metric": 5,
+    "metricLabel": "steps",
+    "steps": 5,
+    "outcome": "Argon ended the run",
+    "errors": [
+      "Cannot read properties of null (reading 'position')"
+    ],
+    "loadErrors": 0,
+    "suspected": [
+      {
+        "step": 4,
+        "note": "Runtime error 'Cannot read properties of null (reading position)' occurred when collecting a gem, and HUD still shows Gems 0."
+      },
+      {
+        "step": 5,
+        "note": "Game loop completely froze after collecting a gem threw 'Cannot read properties of null (reading position)'."
+      }
+    ],
+    "recording": "/recordings/skyhop/run-001-v1.mp4"
+  },
+  {
+    "iteration": 2,
+    "version": 2,
+    "metric": 1,
+    "metricLabel": "m",
+    "steps": 5,
+    "outcome": "game over at 1 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [
+      {
+        "step": 5,
+        "note": "Game over screen overlay fails to render when status is 'over'."
+      }
+    ],
+    "recording": "/recordings/skyhop/run-002-v2-1m.mp4"
+  },
+  {
+    "iteration": 3,
+    "version": 2,
+    "metric": 6,
+    "metricLabel": "steps",
+    "steps": 6,
+    "outcome": "game over at 0 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-003-v2.mp4"
+  },
+  {
+    "iteration": 4,
+    "version": 3,
+    "metric": 5,
+    "metricLabel": "steps",
+    "steps": 5,
+    "outcome": "game over at 0 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-004-v3.mp4"
+  },
+  {
+    "iteration": 5,
+    "version": 3,
+    "metric": 2,
+    "metricLabel": "steps",
+    "steps": 2,
+    "outcome": "stopped",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-005-v3.mp4"
+  }
+]

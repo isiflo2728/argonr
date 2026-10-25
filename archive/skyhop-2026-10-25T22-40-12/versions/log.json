@@ -1,0 +1,108 @@
+[
+  {
+    "version": 1,
+    "parent": null,
+    "iteration": 0,
+    "summary": "Original build",
+    "bugs": [],
+    "edits": [],
+    "createdAt": "2026-10-25T22:33:56.649Z"
+  },
+  {
+    "version": 2,
+    "parent": 1,
+    "iteration": 1,
+    "summary": "Fix the gem collection crash that freezes rendering, along with broken spring pads, crumbling platforms staying solid after falling, the HUD height counter stopping at 10m, and inverted player facing.",
+    "bugs": [
+      {
+        "title": "Collecting a gem throws TypeError and freezes the render loop",
+        "evidence": "At 0:48 in the video (step 4), touching a gem sets pl.gem = null and then immediately reads pl.gem.position.y in logEvent, throwing 'Cannot read properties of null (reading position)' and halting requestAnimationFrame.",
+        "severity": "high"
+      },
+      {
+        "title": "Spring platforms barely bounce the player instead of launching with SPRING velocity",
+        "evidence": "land() sets p.vy = JUMP * 0.4 (5.0) instead of the defined SPRING constant (22), which only reaches 0.39m height while nextPlatform() places the platform after a spring 4.5m to 6m higher.",
+        "severity": "high"
+      },
+      {
+        "title": "Crumbling platforms remain solid in mid-air after falling away",
+        "evidence": "In updatePlatforms(), when pl.crumbleT > 0.55 and pl.falling becomes true, pl.active is never set to false, so updatePlayer() keeps the player standing on or colliding with the original platform height.",
+        "severity": "high"
+      },
+      {
+        "title": "HUD height display stops updating once height reaches 10m",
+        "evidence": "updateHud() checks 'if (h !== shownH && h < 10)' before updating hHeight.textContent, freezing the displayed altitude above 9m.",
+        "severity": "medium"
+      },
+      {
+        "title": "Player character faces opposite to movement direction",
+        "evidence": "At 0:39 in the video, the player's eyes (+Z in local space) face right while moving left because updateVisuals() computes Math.atan2(-p.vx, -p.vz) instead of Math.atan2(p.vx, p.vz).",
+        "severity": "low"
+      }
+    ],
+    "edits": [
+      {
+        "file": "index.html",
+        "find": "        if (Math.hypot(p.x - pl.x, p.y + 0.4 - gy, p.z - pl.z) < 0.95) {\n          pl.g.remove(pl.gem); pl.gem = null; gems++;\n          logEvent(\"gem\", { platform: pl.id, total: gems, height: pl.gem.position.y });\n          sfx.gem(); burst(pl.x, gy - 0.1, pl.z, 10, 0.9);\n        }",
+        "replace": "        if (Math.hypot(p.x - pl.x, p.y + 0.4 - gy, p.z - pl.z) < 0.95) {\n          const gemH = pl.gem.position.y;\n          pl.g.remove(pl.gem); pl.gem = null; gems++;\n          logEvent(\"gem\", { platform: pl.id, total: gems, height: gemH });\n          sfx.gem(); burst(pl.x, gy - 0.1, pl.z, 10, 0.9);\n        }",
+        "why": "Fix: read gem position before nulling pl.gem so collecting a gem does not throw and freeze the game."
+      },
+      {
+        "file": "index.html",
+        "find": "      if (h !== shownH && h < 10) { shownH = h; hHeight.textContent = h; }",
+        "replace": "      if (h !== shownH) { shownH = h; hHeight.textContent = h; }",
+        "why": "Fix: update the HUD height counter at all altitudes instead of capping updates below 10m."
+      },
+      {
+        "file": "index.html",
+        "find": "            if (pl.crumbleT > 0.55) { pl.falling = true; sfx.crack(); burst(pl.x, pl.y, pl.z, 10, 0.8); }",
+        "replace": "            if (pl.crumbleT > 0.55) { pl.falling = true; pl.active = false; sfx.crack(); burst(pl.x, pl.y, pl.z, 10, 0.8); }",
+        "why": "Fix: mark crumbling platforms inactive when they fall so they no longer support the player in mid-air."
+      },
+      {
+        "file": "index.html",
+        "find": "      if (pl.type === \"spring\") {\n        p.vy = JUMP * 0.4; p.springing = true; p.sq = 0.55;",
+        "replace": "      if (pl.type === \"spring\") {\n        p.vy = SPRING; p.springing = true; p.sq = 0.55;",
+        "why": "Fix: launch the player with SPRING velocity when landing on a spring pad."
+      },
+      {
+        "file": "index.html",
+        "find": "        const target = Math.atan2(-p.vx, -p.vz);",
+        "replace": "        const target = Math.atan2(p.vx, p.vz);",
+        "why": "Fix: orient the player's front (+Z eyes/cheeks) toward the direction of travel."
+      }
+    ],
+    "skipped": [],
+    "watchedRecording": true,
+    "createdAt": "2026-10-25T22:35:54.953Z"
+  },
+  {
+    "version": 3,
+    "parent": 2,
+    "iteration": 2,
+    "summary": "Fix the HUD 'Best' score not updating live when surpassing the previous best during a run.",
+    "bugs": [
+      {
+        "title": "HUD 'Best' score does not update live during play when surpassing previous best",
+        "evidence": "At 01:11–01:35 in the video, the player climbs from 5 m to 7 m while the top-right 'Best' chip continues to display 4 until the game-over screen appears at 01:40, because best is only updated inside gameOver().",
+        "severity": "low"
+      },
+      {
+        "title": "Not a bug: fell off platforms at 0 m and 7 m",
+        "evidence": "At 00:13 and 01:35 the player jumped in the wrong direction or misjudged the platform jump and fell; the 650 ms delay before the game over card appears at 00:18 and 01:40 is an intentional fall transition.",
+        "severity": "low"
+      }
+    ],
+    "edits": [
+      {
+        "file": "index.html",
+        "find": "      const h = Math.floor(maxY);\n      if (h !== shownH) { shownH = h; hHeight.textContent = h; }\n      hGems.textContent = gems;\n      hBest.textContent = best;",
+        "replace": "      const h = Math.floor(maxY);\n      if (h !== shownH) { shownH = h; hHeight.textContent = h; }\n      hGems.textContent = gems;\n      hBest.textContent = Math.max(best, h);",
+        "why": "Fix: show the live best height in the HUD chip as soon as the current climb exceeds the saved best."
+      }
+    ],
+    "skipped": [],
+    "watchedRecording": true,
+    "createdAt": "2026-10-25T22:37:59.089Z"
+  }
+]

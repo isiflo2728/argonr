@@ -1,0 +1,96 @@
+[
+  {
+    "iteration": 1,
+    "version": 1,
+    "metric": 5,
+    "metricLabel": "steps",
+    "steps": 5,
+    "outcome": "Argon ended the run",
+    "errors": [
+      "Cannot read properties of null (reading 'position')"
+    ],
+    "loadErrors": 0,
+    "suspected": [
+      {
+        "step": 4,
+        "note": "Collecting a gem throws 'Cannot read properties of null (reading position)' and HUD still shows Gems 0."
+      },
+      {
+        "step": 5,
+        "note": "Game canvas rendering and HUD are completely frozen after collecting a gem, while internal physics state continues updating."
+      }
+    ],
+    "recording": "/recordings/skyhop/run-001-v1.mp4"
+  },
+  {
+    "iteration": 2,
+    "version": 2,
+    "metric": 7,
+    "metricLabel": "m",
+    "steps": 13,
+    "outcome": "game over at 7 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [
+      {
+        "step": 3,
+        "note": "Status is 'over' after falling, but no game over screen or restart prompt is visible."
+      },
+      {
+        "step": 6,
+        "note": "Camera view is obstructed by a higher platform directly between the camera and the player."
+      },
+      {
+        "step": 8,
+        "note": "A foreground cloud completely blocks the camera view of the player and current platform."
+      },
+      {
+        "step": 12,
+        "note": "The 'Best' score in the top-right shows 4 even though current height is 7m."
+      },
+      {
+        "step": 13,
+        "note": "Game status is 'over' after falling off, but no Game Over message or restart prompt is displayed on screen."
+      }
+    ],
+    "recording": "/recordings/skyhop/run-002-v2-7m.mp4"
+  },
+  {
+    "iteration": 3,
+    "version": 3,
+    "metric": 3,
+    "metricLabel": "m",
+    "steps": 6,
+    "outcome": "game over at 3 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-003-v3-3m.mp4"
+  },
+  {
+    "iteration": 4,
+    "version": 3,
+    "metric": 2,
+    "metricLabel": "m",
+    "steps": 4,
+    "outcome": "game over at 2 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-004-v3-2m.mp4"
+  },
+  {
+    "iteration": 5,
+    "version": 3,
+    "metric": 1,
+    "metricLabel": "steps",
+    "steps": 1,
+    "outcome": "stopped",
+    "errors": [
+      "stall: Protocol error (Input.dispatchKeyEvent): Session closed. Most likely the page has been closed."
+    ],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-005-v3.mp4"
+  }
+]

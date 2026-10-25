@@ -1,4 +1,6 @@
 .env
 node_modules
 recordings/
+archive/*/recordings/
+.playtest-profile/
 .DS_Store

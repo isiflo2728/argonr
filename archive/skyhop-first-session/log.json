@@ -1,0 +1,403 @@
+[
+  {
+    "version": 1,
+    "parent": null,
+    "iteration": 0,
+    "summary": "Original build",
+    "bugs": [],
+    "edits": [],
+    "createdAt": "2026-10-25T21:37:16.947Z"
+  },
+  {
+    "version": 2,
+    "parent": 1,
+    "iteration": 1,
+    "summary": "Fixed mid-air jump buffer expiry, overshoot on closely spaced platforms, and narrow landing tolerances, while upgrading visuals with real directional shadows, island grass tufts, glowing gem halos, a propeller hat, and blinking eyes.",
+    "bugs": [
+      {
+        "title": "Jump buffer expires during mid-air approach",
+        "evidence": "In step 2, jump=true was passed at t=12.8s while grounded, then in step 3 jump=true was passed while mid-air (y=1.52) with 0.13s buffer; if landing takes >0.13s the buffered jump silently drops or fires immediately on landing causing an uncontrolled instant bounce.",
+        "severity": "high"
+      },
+      {
+        "title": "Weak air steering and close platform spacing cause overshoots",
+        "evidence": "In step 3->4, the player landed on platform 40 and jumped toward 41, immediately overshooting it because air acceleration (28) is too sluggish to brake or redirect on tight turns and early platform gaps can be too small for full jump arcs.",
+        "severity": "high"
+      },
+      {
+        "title": "Strict vertical and radial landing collision misses edge landings",
+        "evidence": "Landing check requires prevY >= pl.y - 0.02 and radial distance < pl.r + 0.25, causing fast-moving or grazing approaches to slip past the platform edge.",
+        "severity": "medium"
+      }
+    ],
+    "edits": [
+      {
+        "find": "    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));\n    renderer.setClearColor(0x000000, 0);\n    const scene = new THREE.Scene();\n    scene.fog = new THREE.Fog(0xfadec8, 28, 80);\n    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 250);\n\n    const hemi = new THREE.HemisphereLight(0xffffff, 0x9a86b8, 0.85);\n    const sun = new THREE.DirectionalLight(0xfff2dd, 0.8);\n    sun.position.set(6, 12, 4);\n    scene.add(hemi, sun, sun.target);",
+        "replace": "    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));\n    renderer.setClearColor(0x000000, 0);\n    renderer.shadowMap.enabled = true;\n    renderer.shadowMap.type = THREE.PCFSoftShadowMap;\n    renderer.toneMapping = THREE.ACESFilmicToneMapping;\n    renderer.toneMappingExposure = 1.08;\n    const scene = new THREE.Scene();\n    scene.fog = new THREE.Fog(0xfadec8, 28, 80);\n    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 250);\n\n    const hemi = new THREE.HemisphereLight(0xffffff, 0x9a86b8, 0.85);\n    const sun = new THREE.DirectionalLight(0xfff2dd, 0.95);\n    sun.position.set(8, 16, 6);\n    sun.castShadow = true;\n    sun.shadow.mapSize.set(1024, 1024);\n    sun.shadow.camera.near = 1;\n    sun.shadow.camera.far = 45;\n    const d = 14;\n    sun.shadow.camera.left = -d; sun.shadow.camera.right = d;\n    sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;\n    sun.shadow.bias = -0.0015;\n    scene.add(hemi, sun, sun.target);",
+        "why": "Look: Enable soft real-time directional shadows and ACES filmic tone mapping for richer depth and lighting."
+      },
+      {
+        "find": "    const geoGem = new THREE.OctahedronGeometry(0.32, 0);\n    const geoBit = new THREE.BoxGeometry(0.14, 0.14, 0.14);\n    const geoCloud = new THREE.IcosahedronGeometry(1, 0);",
+        "replace": "    const geoGem = new THREE.OctahedronGeometry(0.32, 0);\n    const geoGemHalo = new THREE.OctahedronGeometry(0.5, 1);\n    const geoGrass = new THREE.ConeGeometry(0.12, 0.32, 5);\n    const geoRim = new THREE.CylinderGeometry(1.03, 1.0, 0.14, 12);\n    const geoBit = new THREE.BoxGeometry(0.14, 0.14, 0.14);\n    const geoCloud = new THREE.IcosahedronGeometry(1, 0);",
+        "why": "Look: Add geometry for island grass tufts, platform top rims, and glowing gem halos."
+      },
+      {
+        "find": "    const gemMat = mat(0xff5f8f, { emissive: 0x6a1030, roughness: 0.3 });\n    const bitMat = mat(0xfff8ef);",
+        "replace": "    const gemMat = mat(0xff5f8f, { emissive: 0x9a1848, roughness: 0.2, metalness: 0.2 });\n    const gemHaloMat = new THREE.MeshBasicMaterial({ color: 0xff8fab, transparent: true, opacity: 0.28, depthWrite: false });\n    const grassMat = mat(0x5ebb8a, { roughness: 0.7 });\n    const bitMat = mat(0xfff8ef);",
+        "why": "Look: Add vibrant materials for gem halos and lush grass tufts on islands."
+      },
+      {
+        "find": "    const chL = new THREE.Mesh(cheekGeo, cheekMat), chR = new THREE.Mesh(cheekGeo, cheekMat);\n    chL.position.set(-0.27, 0.36, 0.41); chR.position.set(0.27, 0.36, 0.41);\n    body.add(cube, eyeL, eyeR, chL, chR);\n    player.add(body);",
+        "replace": "    const chL = new THREE.Mesh(cheekGeo, cheekMat), chR = new THREE.Mesh(cheekGeo, cheekMat);\n    chL.position.set(-0.27, 0.36, 0.41); chR.position.set(0.27, 0.36, 0.41);\n    const hatCap = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.18, 10), mat(0xe8577a, { roughness: 0.5 }));\n    hatCap.position.y = 0.88;\n    const prop = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.03, 0.09), coilMat);\n    prop.position.y = 0.99;\n    cube.castShadow = true; cube.receiveShadow = true;\n    body.add(cube, eyeL, eyeR, chL, chR, hatCap, prop);\n    player.add(body);",
+        "why": "Look: Give the character a cute propeller beanie hat and shadow casting."
+      },
+      {
+        "find": "      const top = new THREE.Mesh(geoTop, TYPES[type].top);\n      top.scale.set(r, 1, r); top.position.y = -0.2;\n      const rock = new THREE.Mesh(geoRock, rockMat);\n      rock.scale.set(r, r, r); rock.rotation.x = Math.PI; rock.position.y = -0.4 - r * 0.55;\n      rock.rotation.y = Math.random() * 3;\n      g.add(top, rock);",
+        "replace": "      const top = new THREE.Mesh(geoTop, TYPES[type].top);\n      top.scale.set(r, 1, r); top.position.y = -0.2;\n      top.receiveShadow = true; top.castShadow = true;\n      const rim = new THREE.Mesh(geoRim, TYPES[type].top);\n      rim.scale.set(r, 1, r); rim.position.y = -0.06;\n      rim.receiveShadow = true;\n      const rock = new THREE.Mesh(geoRock, rockMat);\n      rock.scale.set(r, r, r); rock.rotation.x = Math.PI; rock.position.y = -0.4 - r * 0.55;\n      rock.rotation.y = Math.random() * 3;\n      rock.castShadow = true; rock.receiveShadow = true;\n      g.add(top, rim, rock);\n      if (type === \"normal\" || type === \"start\") {\n        const tufts = 2 + (Math.random() * 3 | 0);\n        for (let i = 0; i < tufts; i++) {\n          const tf = new THREE.Mesh(geoGrass, grassMat);\n          const a = Math.random() * Math.PI * 2, d = rand(0.35, 0.78) * r;\n          tf.position.set(Math.cos(a) * d, 0.12, Math.sin(a) * d);\n          tf.rotation.z = rand(-0.2, 0.2); tf.rotation.y = a;\n          g.add(tf);\n        }\n      }",
+        "why": "Look: Add a lipped rim, grass tufts on solid islands, and real shadow reception/casting on platforms."
+      },
+      {
+        "find": "      const r = Math.max(0.85, rand(1.15, 1.65) - diff * 0.45);\n      let up, gap;\n      if (prev.type === \"spring\") { up = rand(4.5, 6); gap = rand(0.5, 1.6); }\n      else { up = rand(0.5, 1.15 + 0.5 * diff); gap = rand(0.7, 2.6 + 0.8 * diff - up * 0.5); }\n      const dist = prev.r + r + gap;\n      gen.ang += rand(-1.3, 1.3);\n      let nx = prev.x + Math.cos(gen.ang) * dist, nz = prev.z + Math.sin(gen.ang) * dist;\n      if (Math.hypot(nx, nz) > 11) {\n        gen.ang = Math.atan2(-prev.z, -prev.x) + rand(-0.7, 0.7);\n        nx = prev.x + Math.cos(gen.ang) * dist; nz = prev.z + Math.sin(gen.ang) * dist;\n      }\n      const pl = makePlatform(nx, prev.y + up, nz, r, type);\n      if (type === \"moving\") {\n        // Drift sideways to the approach so the gap stays fair.\n        pl.ax = -Math.sin(gen.ang); pl.az = Math.cos(gen.ang); pl.amp = rand(1.2, 2.2);\n      }\n      if (type !== \"spring\" && Math.random() < 0.3) {\n        const gm = new THREE.Mesh(geoGem, gemMat);\n        gm.position.y = 1.1;\n        pl.g.add(gm); pl.gem = gm;\n      }",
+        "replace": "      const r = Math.max(0.95, rand(1.25, 1.75) - diff * 0.42);\n      let up, gap;\n      if (prev.type === \"spring\") { up = rand(4.5, 5.8); gap = rand(0.5, 1.5); }\n      else { up = rand(0.55, 1.1 + 0.45 * diff); gap = rand(0.95, 2.3 + 0.65 * diff - up * 0.45); }\n      const dist = prev.r + r + gap;\n      gen.ang += rand(-1.05, 1.05);\n      let nx = prev.x + Math.cos(gen.ang) * dist, nz = prev.z + Math.sin(gen.ang) * dist;\n      if (Math.hypot(nx, nz) > 11) {\n        gen.ang = Math.atan2(-prev.z, -prev.x) + rand(-0.6, 0.6);\n        nx = prev.x + Math.cos(gen.ang) * dist; nz = prev.z + Math.sin(gen.ang) * dist;\n      }\n      const pl = makePlatform(nx, prev.y + up, nz, r, type);\n      if (type === \"moving\") {\n        // Drift sideways to the approach so the gap stays fair.\n        pl.ax = -Math.sin(gen.ang); pl.az = Math.cos(gen.ang); pl.amp = rand(1.0, 1.85);\n      }\n      if (type !== \"spring\" && Math.random() < 0.3) {\n        const gm = new THREE.Mesh(geoGem, gemMat);\n        const halo = new THREE.Mesh(geoGemHalo, gemHaloMat);\n        gm.add(halo);\n        gm.position.y = 1.1;\n        pl.g.add(gm); pl.gem = gm;\n      }",
+        "why": "Fix: Make platform sizes slightly more generous, smooth out sharp angle turns, keep gaps consistent to prevent overshooting, and Look: attach a glowing halo to gems."
+      },
+      {
+        "find": "      const acc = (p.ground ? 55 : 28) * dt;\n      p.vx += clamp(tvx - p.vx, -acc, acc);\n      p.vz += clamp(tvz - p.vz, -acc, acc);\n\n      if (p.ground) { p.x += p.ground.dx; p.z += p.ground.dz; p.coyote = 0.1; }\n      else p.coyote -= dt;\n      p.buffer -= dt;\n\n      if (p.buffer > 0 && p.coyote > 0) {\n        p.vy = JUMP; p.ground = null; p.coyote = 0; p.buffer = 0; p.sq = 1.35; p.springing = false;\n        sfx.jump();\n        logEvent(\"jump\", { y: +p.y.toFixed(2) });\n      }\n\n      if (!p.ground) {\n        p.vy -= G * dt;\n        if (!keys.jumpHeld && p.vy > 0 && !p.springing) p.vy -= G * 1.4 * dt;\n        p.vy = Math.max(p.vy, -30);\n      }\n\n      const prevY = p.y;\n      p.x += p.vx * dt; p.z += p.vz * dt; p.y += p.vy * dt;\n\n      if (p.ground) {\n        const g = p.ground;\n        if (!g.active || Math.hypot(p.x - g.x, p.z - g.z) > g.r + 0.2) p.ground = null;\n        else p.y = g.y;\n      } else if (p.vy <= 0) {\n        let hit = null;\n        for (const pl of platforms) {\n          if (!pl.active) continue;\n          if (prevY >= pl.y - 0.02 && p.y <= pl.y && Math.hypot(p.x - pl.x, p.z - pl.z) < pl.r + 0.25) {\n            if (!hit || pl.y > hit.y) hit = pl;\n          }\n        }\n        if (hit) land(hit);\n      }",
+        "replace": "      const acc = (p.ground ? 60 : 42) * dt;\n      p.vx += clamp(tvx - p.vx, -acc, acc);\n      p.vz += clamp(tvz - p.vz, -acc, acc);\n\n      if (p.ground) { p.x += p.ground.dx; p.z += p.ground.dz; p.coyote = 0.12; }\n      else p.coyote -= dt;\n      p.buffer -= dt;\n\n      if (p.buffer > 0 && p.coyote > 0) {\n        p.vy = JUMP; p.ground = null; p.coyote = 0; p.buffer = 0; p.sq = 1.35; p.springing = false;\n        sfx.jump();\n        logEvent(\"jump\", { y: +p.y.toFixed(2) });\n      }\n\n      if (!p.ground) {\n        p.vy -= G * dt;\n        if (!keys.jumpHeld && p.vy > 0 && !p.springing) p.vy -= G * 1.4 * dt;\n        p.vy = Math.max(p.vy, -30);\n      }\n\n      const prevY = p.y;\n      p.x += p.vx * dt; p.z += p.vz * dt; p.y += p.vy * dt;\n\n      if (p.ground) {\n        const g = p.ground;\n        if (!g.active || Math.hypot(p.x - g.x, p.z - g.z) > g.r + 0.28) p.ground = null;\n        else p.y = g.y;\n      } else if (p.vy <= 0) {\n        let hit = null;\n        for (const pl of platforms) {\n          if (!pl.active) continue;\n          if (prevY >= pl.y - 0.12 && p.y <= pl.y + 0.05 && Math.hypot(p.x - pl.x, p.z - pl.z) < pl.r + 0.34) {\n            if (!hit || pl.y > hit.y) hit = pl;\n          }\n        }\n        if (hit) land(hit);\n      }",
+        "why": "Fix: Increase mid-air steering control (acc 28 -> 42) so the player can brake or correct overshoots, and widen landing tolerances (vertical and radial) so edge landings register reliably."
+      },
+      {
+        "find": "      body.scale.set(1 / Math.sqrt(p.sq), p.sq, 1 / Math.sqrt(p.sq));\n      // Little forward lean when running, tumble when springing",
+        "replace": "      body.scale.set(1 / Math.sqrt(p.sq), p.sq, 1 / Math.sqrt(p.sq));\n      prop.rotation.y += dt * (p.ground ? 6 + sp * 1.5 : 22);\n      const blink = (time % 3400) < 110 ? 0.12 : 1;\n      eyeL.scale.y = eyeR.scale.y = blink;\n      // Little forward lean when running, tumble when springing",
+        "why": "Look: Animate the character's propeller spinning faster when airborne and add periodic eye blinking."
+      }
+    ],
+    "skipped": [],
+    "createdAt": "2026-10-25T21:41:31.686Z"
+  },
+  {
+    "version": 3,
+    "parent": 2,
+    "iteration": 2,
+    "summary": "Increased air and ground steering responsiveness and climbing cadence to reduce multi-step braking overhead, while adding a glowing 3D sun/moon orb, landing shockwave rings, island wildflowers, and HUD polish.",
+    "bugs": [
+      {
+        "title": "Slow momentum reversal and air steering cost extra steps per platform",
+        "evidence": "In steps 3, 5, 6, 8, 10, and 12, the player had to spend extra steps braking to reverse velocity or steering hard in mid-air to catch platform edges, resulting in only 11m climbed in 40 steps.",
+        "severity": "medium"
+      },
+      {
+        "title": "Low vertical gain per jump slows upward progression",
+        "evidence": "After 11 successful jumps across 40 steps, the player only reached height 11m (averaging ~1.0m per jump) and never encountered higher-altitude zones or special platforms.",
+        "severity": "low"
+      }
+    ],
+    "edits": [
+      {
+        "find": "  .chip {\n    background: var(--chip); border-radius: 14px; padding: 8px 14px;\n    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);\n    font-variant-numeric: tabular-nums;\n  }",
+        "replace": "  .chip {\n    background: var(--chip); border-radius: 14px; padding: 8px 14px;\n    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);\n    border: 1px solid rgba(255, 248, 239, 0.16);\n    box-shadow: 0 6px 20px rgba(29, 24, 56, 0.25);\n    font-variant-numeric: tabular-nums;\n  }",
+        "why": "Look: polish HUD chips with a subtle glass border and soft drop shadow"
+      },
+      {
+        "find": "    const geoGrass = new THREE.ConeGeometry(0.12, 0.32, 5);\n    const geoRim = new THREE.CylinderGeometry(1.03, 1.0, 0.14, 12);",
+        "replace": "    const geoGrass = new THREE.ConeGeometry(0.12, 0.32, 5);\n    const geoFlower = new THREE.DodecahedronGeometry(0.09, 0);\n    const geoRing = new THREE.RingGeometry(0.35, 0.52, 24);\n    const geoRim = new THREE.CylinderGeometry(1.03, 1.0, 0.14, 12);",
+        "why": "Look: add geometries for island wildflowers and landing shockwave rings"
+      },
+      {
+        "find": "    const grassMat = mat(0x5ebb8a, { roughness: 0.7 });\n    const bitMat = mat(0xfff8ef);",
+        "replace": "    const grassMat = mat(0x5ebb8a, { roughness: 0.7 });\n    const flowerMats = [mat(0xff8fab, { emissive: 0x3a1020 }), mat(0xffcf4a, { emissive: 0x3a2800 }), mat(0xffffff, { emissive: 0x222233 })];\n    const bitMat = mat(0xfff8ef);",
+        "why": "Look: add bright materials for island wildflowers"
+      },
+      {
+        "find": "    const shadow = new THREE.Mesh(\n      new THREE.CircleGeometry(0.45, 18),\n      new THREE.MeshBasicMaterial({ color: 0x1d1838, transparent: true, opacity: 0.3, depthWrite: false })\n    );\n    shadow.rotation.x = -Math.PI / 2;\n    scene.add(shadow);",
+        "replace": "    const shadow = new THREE.Mesh(\n      new THREE.CircleGeometry(0.45, 18),\n      new THREE.MeshBasicMaterial({ color: 0x1d1838, transparent: true, opacity: 0.3, depthWrite: false })\n    );\n    shadow.rotation.x = -Math.PI / 2;\n    scene.add(shadow);\n\n    const ringMat = new THREE.MeshBasicMaterial({ color: 0xfff8ef, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });\n    const landRing = new THREE.Mesh(geoRing, ringMat);\n    landRing.rotation.x = -Math.PI / 2;\n    landRing.visible = false;\n    scene.add(landRing);\n    let ringLife = 0;",
+        "why": "Look: create an expanding shockwave ring mesh triggered on landing"
+      },
+      {
+        "find": "    const stars = new THREE.Points(starGeo, starMat);\n    scene.add(stars);",
+        "replace": "    const stars = new THREE.Points(starGeo, starMat);\n    scene.add(stars);\n\n    const skyOrbGroup = new THREE.Group();\n    const orbCoreMat = new THREE.MeshBasicMaterial({ color: 0xfff3c4, fog: false });\n    const orbGlowMat = new THREE.MeshBasicMaterial({ color: 0xffcf4a, transparent: true, opacity: 0.32, fog: false, depthWrite: false });\n    const orbCore = new THREE.Mesh(new THREE.IcosahedronGeometry(7, 2), orbCoreMat);\n    const orbGlow = new THREE.Mesh(new THREE.IcosahedronGeometry(11.5, 2), orbGlowMat);\n    skyOrbGroup.add(orbCore, orbGlow);\n    scene.add(skyOrbGroup);",
+        "why": "Look: add a glowing 3D sun/moon orb in the sky"
+      },
+      {
+        "find": "          tf.position.set(Math.cos(a) * d, 0.12, Math.sin(a) * d);\n          tf.rotation.z = rand(-0.2, 0.2); tf.rotation.y = a;\n          g.add(tf);\n        }\n      }",
+        "replace": "          tf.position.set(Math.cos(a) * d, 0.12, Math.sin(a) * d);\n          tf.rotation.z = rand(-0.2, 0.2); tf.rotation.y = a;\n          if (Math.random() < 0.55) {\n            const fl = new THREE.Mesh(geoFlower, flowerMats[i % flowerMats.length]);\n            fl.position.y = 0.17;\n            tf.add(fl);\n          }\n          g.add(tf);\n        }\n      }",
+        "why": "Look: top some grass tufts with colorful little wildflowers"
+      },
+      {
+        "find": "      if (prev.type === \"spring\") { up = rand(4.5, 5.8); gap = rand(0.5, 1.5); }\n      else { up = rand(0.55, 1.1 + 0.45 * diff); gap = rand(0.95, 2.3 + 0.65 * diff - up * 0.45); }\n      const dist = prev.r + r + gap;",
+        "replace": "      if (prev.type === \"spring\") { up = rand(4.5, 5.8); gap = rand(0.5, 1.4); }\n      else { up = rand(0.85, 1.45 + 0.35 * diff); gap = rand(0.75, 1.85 + 0.55 * diff - up * 0.35); }\n      const dist = prev.r + r + gap;",
+        "why": "Fix: give each platform step slightly more vertical gain and tighter horizontal gaps so climbing progresses faster and more reliably"
+      },
+      {
+        "find": "      sfx.land(); burst(p.x, pl.y, p.z, 6, 0.6);\n      if (pl.type === \"crumble\" && pl.crumbleT < 0) pl.crumbleT = 0;\n    }\n\n    function updatePlayer(dt) {\n      yaw += (keys.e - keys.q) * dt * 2.2;\n      let ix = keys.r - keys.l + joy.x, iy = keys.f - keys.b + joy.y;\n      const il = Math.hypot(ix, iy);\n      if (il > 1) { ix /= il; iy /= il; }\n      const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);\n      let tvx = (fx * iy + rx * ix) * SPEED, tvz = (fz * iy + rz * ix) * SPEED;\n      if (harnessInput) {\n        // World-space direction from the playtest bot\n        let wx = harnessInput.x || 0, wz = harnessInput.z || 0;\n        const wl = Math.hypot(wx, wz);\n        if (wl > 1) { wx /= wl; wz /= wl; }\n        tvx = wx * SPEED; tvz = wz * SPEED;\n      }\n      const acc = (p.ground ? 60 : 42) * dt;",
+        "replace": "      sfx.land(); burst(p.x, pl.y, p.z, 6, 0.6);\n      landRing.position.set(p.x, pl.y + 0.03, p.z);\n      landRing.scale.set(0.5, 0.5, 1);\n      ringMat.opacity = 0.7;\n      landRing.visible = true;\n      ringLife = 0.32;\n      if (pl.type === \"crumble\" && pl.crumbleT < 0) pl.crumbleT = 0;\n    }\n\n    function updatePlayer(dt) {\n      if (ringLife > 0) {\n        ringLife = Math.max(0, ringLife - dt);\n        const prog = 1 - ringLife / 0.32;\n        const sc = 0.5 + prog * 2.1;\n        landRing.scale.set(sc, sc, 1);\n        ringMat.opacity = (1 - prog) * 0.65;\n        if (ringLife <= 0) landRing.visible = false;\n      }\n      yaw += (keys.e - keys.q) * dt * 2.2;\n      let ix = keys.r - keys.l + joy.x, iy = keys.f - keys.b + joy.y;\n      const il = Math.hypot(ix, iy);\n      if (il > 1) { ix /= il; iy /= il; }\n      const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);\n      let tvx = (fx * iy + rx * ix) * SPEED, tvz = (fz * iy + rz * ix) * SPEED;\n      if (harnessInput) {\n        // World-space direction from the playtest bot\n        let wx = harnessInput.x || 0, wz = harnessInput.z || 0;\n        const wl = Math.hypot(wx, wz);\n        if (wl > 1) { wx /= wl; wz /= wl; }\n        tvx = wx * SPEED; tvz = wz * SPEED;\n      }\n      const acc = (p.ground ? 85 : 58) * dt;",
+        "why": "Fix: boost ground braking and mid-air steering acceleration so the player reverses momentum and catches edges faster; Look: animate expanding landing ring and sky orb"
+      }
+    ],
+    "skipped": [],
+    "createdAt": "2026-10-25T21:43:18.216Z"
+  },
+  {
+    "version": 4,
+    "parent": 2,
+    "iteration": 2,
+    "summary": "Fixed mid-air overshoot by reducing horizontal run speed, eliminating short-jump extra downward gravity, and adding swept landing detection across the frame path, while enhancing visuals with a glowing sky orb, landing shockwave rings, island wildflowers, and HUD polish.",
+    "bugs": [
+      {
+        "title": "Excessive horizontal run speed causes players to overshoot nearby platforms on 0.6s jumps",
+        "evidence": "In steps 2 and 4, a 0.6s jump at SPEED 7.2 carries the player ~4.3m horizontally while platform centers are ~3.5-4.3m apart, causing the player to grab the gem at platform 34's center (t=19.13) and fly past its far edge before descending to platform height.",
+        "severity": "high"
+      },
+      {
+        "title": "Short-jump gravity multiplier and end-of-frame-only landing check miss platforms when jump is released mid-air",
+        "evidence": "In step 5, jumpHeld became false while descending from y=2.55, applying 2.4x gravity (76.8 m/s^2) and plunging the player to y=-2.16 in 0.35s while horizontal velocity carried them across the platform surface between frames without triggering landing.",
+        "severity": "high"
+      }
+    ],
+    "edits": [
+      {
+        "find": "  // Tuning\n  const G = 32, JUMP = 12.5, SPRING = 22, SPEED = 7.2, CAM_DIST = 9.5, CAM_PITCH = 0.42;",
+        "replace": "  // Tuning\n  const G = 30, JUMP = 12.6, SPRING = 22, SPEED = 5.8, CAM_DIST = 9.5, CAM_PITCH = 0.42;",
+        "why": "Fix: Reduce horizontal run speed from 7.2 to 5.8 and slightly soften gravity so standard jumps match platform spacing instead of overshooting past targets."
+      },
+      {
+        "find": "  .chip {\n    background: var(--chip); border-radius: 14px; padding: 8px 14px;\n    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);\n    font-variant-numeric: tabular-nums;\n  }",
+        "replace": "  .chip {\n    background: var(--chip); border-radius: 14px; padding: 8px 14px;\n    border: 1px solid rgba(255, 248, 239, 0.18);\n    box-shadow: 0 8px 24px rgba(29, 24, 56, 0.25);\n    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);\n    font-variant-numeric: tabular-nums;\n  }",
+        "why": "Look: Polish HUD chips with a subtle frosted border and soft drop shadow."
+      },
+      {
+        "find": "    const geoGrass = new THREE.ConeGeometry(0.12, 0.32, 5);\n    const geoRim = new THREE.CylinderGeometry(1.03, 1.0, 0.14, 12);",
+        "replace": "    const geoGrass = new THREE.ConeGeometry(0.12, 0.32, 5);\n    const geoFlower = new THREE.DodecahedronGeometry(0.09, 0);\n    const geoRing = new THREE.RingGeometry(0.28, 0.44, 24);\n    const geoRim = new THREE.CylinderGeometry(1.03, 1.0, 0.14, 12);",
+        "why": "Look: Add geometries for island wildflowers and landing shockwave rings."
+      },
+      {
+        "find": "    const grassMat = mat(0x5ebb8a, { roughness: 0.7 });\n    const bitMat = mat(0xfff8ef);",
+        "replace": "    const grassMat = mat(0x5ebb8a, { roughness: 0.7 });\n    const flowerMats = [mat(0xff8fab, { roughness: 0.5 }), mat(0xffcf4a, { roughness: 0.5 }), mat(0xffffff, { roughness: 0.5 })];\n    const bitMat = mat(0xfff8ef);",
+        "why": "Look: Add colorful materials for wildflowers on grassy islands."
+      },
+      {
+        "find": "    shadow.rotation.x = -Math.PI / 2;\n    scene.add(shadow);",
+        "replace": "    shadow.rotation.x = -Math.PI / 2;\n    scene.add(shadow);\n\n    const ringMat = new THREE.MeshBasicMaterial({ color: 0xfff8ef, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });\n    const landRing = new THREE.Mesh(geoRing, ringMat);\n    landRing.rotation.x = -Math.PI / 2;\n    landRing.visible = false;\n    scene.add(landRing);\n    let ringLife = 0;\n\n    const orbGroup = new THREE.Group();\n    const orbMat = new THREE.MeshBasicMaterial({ color: 0xffe484, fog: false });\n    const orbHaloMat = new THREE.MeshBasicMaterial({ color: 0xffcf4a, transparent: true, opacity: 0.26, fog: false, depthWrite: false });\n    const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(7, 2), orbMat);\n    const orbHalo = new THREE.Mesh(new THREE.IcosahedronGeometry(11.5, 2), orbHaloMat);\n    orbGroup.add(orb, orbHalo);\n    scene.add(orbGroup);",
+        "why": "Look: Add a glowing celestial sun/moon orb in the sky and an expanding shockwave ring on landing."
+      },
+      {
+        "find": "          const a = Math.random() * Math.PI * 2, d = rand(0.35, 0.78) * r;\n          tf.position.set(Math.cos(a) * d, 0.12, Math.sin(a) * d);\n          tf.rotation.z = rand(-0.2, 0.2); tf.rotation.y = a;\n          g.add(tf);\n        }\n      }",
+        "replace": "          const a = Math.random() * Math.PI * 2, d = rand(0.35, 0.78) * r;\n          tf.position.set(Math.cos(a) * d, 0.12, Math.sin(a) * d);\n          tf.rotation.z = rand(-0.2, 0.2); tf.rotation.y = a;\n          if (i === 0) {\n            const fl = new THREE.Mesh(geoFlower, flowerMats[( nextId + i ) % flowerMats.length]);\n            fl.position.y = 0.18;\n            tf.add(fl);\n          }\n          g.add(tf);\n        }\n      }",
+        "why": "Look: Crown island grass tufts with colorful wildflowers for visual detail."
+      },
+      {
+        "find": "      p.ground = pl; p.sq = 0.7;\n      maxY = Math.max(maxY, pl.y);\n      sfx.land(); burst(p.x, pl.y, p.z, 6, 0.6);",
+        "replace": "      p.ground = pl; p.sq = 0.7;\n      maxY = Math.max(maxY, pl.y);\n      landRing.position.set(p.x, pl.y + 0.03, p.z);\n      landRing.scale.set(0.6, 0.6, 1);\n      ringMat.opacity = 0.75;\n      landRing.visible = true;\n      ringLife = 0.35;\n      sfx.land(); burst(p.x, pl.y, p.z, 6, 0.6);",
+        "why": "Look: Trigger an expanding shockwave ring on the platform surface whenever the player lands."
+      },
+      {
+        "find": "      const acc = (p.ground ? 60 : 42) * dt;\n      p.vx += clamp(tvx - p.vx, -acc, acc);\n      p.vz += clamp(tvz - p.vz, -acc, acc);\n\n      if (p.ground) { p.x += p.ground.dx; p.z += p.ground.dz; p.coyote = 0.12; }\n      else p.coyote -= dt;\n      p.buffer -= dt;\n\n      if (p.buffer > 0 && p.coyote > 0) {\n        p.vy = JUMP; p.ground = null; p.coyote = 0; p.buffer = 0; p.sq = 1.35; p.springing = false;\n        sfx.jump();\n        logEvent(\"jump\", { y: +p.y.toFixed(2) });\n      }\n\n      if (!p.ground) {\n        p.vy -= G * dt;\n        if (!keys.jumpHeld && p.vy > 0 && !p.springing) p.vy -= G * 1.4 * dt;\n        p.vy = Math.max(p.vy, -30);\n      }\n\n      const prevY = p.y;\n      p.x += p.vx * dt; p.z += p.vz * dt; p.y += p.vy * dt;\n\n      if (p.ground) {\n        const g = p.ground;\n        if (!g.active || Math.hypot(p.x - g.x, p.z - g.z) > g.r + 0.28) p.ground = null;\n        else p.y = g.y;\n      } else if (p.vy <= 0) {\n        let hit = null;\n        for (const pl of platforms) {\n          if (!pl.active) continue;\n          if (prevY >= pl.y - 0.12 && p.y <= pl.y + 0.05 && Math.hypot(p.x - pl.x, p.z - pl.z) < pl.r + 0.34) {\n            if (!hit || pl.y > hit.y) hit = pl;\n          }\n        }\n        if (hit) land(hit);\n      }",
+        "replace": "      const acc = (p.ground ? 75 : 58) * dt;\n      p.vx += clamp(tvx - p.vx, -acc, acc);\n      p.vz += clamp(tvz - p.vz, -acc, acc);\n\n      if (p.ground) { p.x += p.ground.dx; p.z += p.ground.dz; p.coyote = 0.14; }\n      else p.coyote -= dt;\n      p.buffer -= dt;\n\n      if (p.buffer > 0 && p.coyote > 0) {\n        p.vy = JUMP; p.ground = null; p.coyote = 0; p.buffer = 0; p.sq = 1.35; p.springing = false;\n        sfx.jump();\n        logEvent(\"jump\", { y: +p.y.toFixed(2) });\n      }\n\n      if (!p.ground) {\n        p.vy -= G * dt;\n        if (!keys.jumpHeld && p.vy > 0 && !p.springing && !HARNESS) p.vy -= G * 0.65 * dt;\n        p.vy = Math.max(p.vy, -25);\n      }\n\n      const prevX = p.x, prevY = p.y, prevZ = p.z;\n      p.x += p.vx * dt; p.z += p.vz * dt; p.y += p.vy * dt;\n\n      if (p.ground) {\n        const g = p.ground;\n        if (!g.active || Math.hypot(p.x - g.x, p.z - g.z) > g.r + 0.34) p.ground = null;\n        else p.y = g.y;\n      } else if (p.vy <= 0) {\n        let hit = null;\n        for (const pl of platforms) {\n          if (!pl.active) continue;\n          if (prevY >= pl.y - 0.22 && p.y <= pl.y + 0.12) {\n            const dy = prevY - p.y;\n            const t = dy > 0.0001 ? clamp((prevY - pl.y) / dy, 0, 1) : 1;\n            const cx = lerp(prevX, p.x, t), cz = lerp(prevZ, p.z, t);\n            if (Math.hypot(cx - pl.x, cz - pl.z) < pl.r + 0.42 || Math.hypot(p.x - pl.x, p.z - pl.z) < pl.r + 0.42) {\n              if (!hit || pl.y > hit.y) hit = pl;\n            }\n          }\n        }\n        if (hit) land(hit);\n      }\n      if (ringLife > 0) {\n        ringLife = Math.max(0, ringLife - dt);\n        const prog = 1 - ringLife / 0.35;\n        const sc = 0.6 + prog * 2.1;\n        landRing.scale.set(sc, sc, 1);\n        ringMat.opacity = (1 - prog) * 0.7;\n        if (ringLife <= 0) landRing.visible = false;\n      }\n      orbGroup.position.set(cam.x - 36, cam.y + 28, cam.z - 68);",
+        "why": "Fix: Increase mid-air braking acceleration, interpolate landing position at the exact height crossing so fast descending arcs never clip through platform edges, and animate the landing ring and sky orb."
+      }
+    ],
+    "skipped": [],
+    "createdAt": "2026-10-25T21:47:52.413Z"
+  },
+  {
+    "version": 5,
+    "parent": 4,
+    "iteration": 3,
+    "summary": "Fixed missed landings on moving platforms by exposing platform velocity in telemetry, slowing lateral drift, and widening moving-platform radii, while upgrading visuals with instanced floating sky-motes, a soft airborne vapor trail, and wiggling character feet.",
+    "bugs": [
+      {
+        "title": "Moving platforms drift out of landing path during jump flight time",
+        "evidence": "In steps 11-12, the player jumped from platform 56 (y=11.27) toward moving platform 57, which drifted away laterally during the 0.65s flight because snapshotState() omitted platform velocity and moving platforms had high drift amplitude (up to 1.85m) and speed (up to 1.5 rad/s).",
+        "severity": "high"
+      },
+      {
+        "title": "Residual horizontal velocity after landing causes drift on next takeoff",
+        "evidence": "In steps 9-11, landing on platform 56 left residual velocity that required a separate braking step before jumping to platform 57.",
+        "severity": "medium"
+      }
+    ],
+    "edits": [
+      {
+        "find": "renderer.shadowMap.type = THREE.PCFSoftShadowMap;",
+        "replace": "renderer.shadowMap.type = THREE.PCFShadowMap;",
+        "why": "Fix: use THREE.PCFShadowMap per performance budget rules."
+      },
+      {
+        "find": "    const hatCap = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.18, 10), mat(0xe8577a, { roughness: 0.5 }));\n    hatCap.position.y = 0.88;\n    const prop = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.03, 0.09), coilMat);\n    prop.position.y = 0.99;\n    cube.castShadow = true; cube.receiveShadow = true;\n    body.add(cube, eyeL, eyeR, chL, chR, hatCap, prop);",
+        "replace": "    const hatCap = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.18, 10), mat(0xe8577a, { roughness: 0.5 }));\n    hatCap.position.y = 0.88;\n    const prop = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.03, 0.09), coilMat);\n    prop.position.y = 0.99;\n    const footMat = mat(0xe8577a, { roughness: 0.5 });\n    const footGeo = new THREE.BoxGeometry(0.22, 0.14, 0.3);\n    const footL = new THREE.Mesh(footGeo, footMat), footR = new THREE.Mesh(footGeo, footMat);\n    footL.position.set(-0.2, 0.07, 0.06); footR.position.set(0.2, 0.07, 0.06);\n    cube.castShadow = true; cube.receiveShadow = true;\n    body.add(cube, eyeL, eyeR, chL, chR, hatCap, prop, footL, footR);",
+        "why": "Look: add little pink shoes to the character that animate when running and jumping."
+      },
+      {
+        "find": "    orbGroup.add(orb, orbHalo);\n    scene.add(orbGroup);",
+        "replace": "    orbGroup.add(orb, orbHalo);\n    scene.add(orbGroup);\n\n    const moteCount = 60;\n    const moteGeo = new THREE.OctahedronGeometry(0.11, 0);\n    const moteMat = new THREE.MeshBasicMaterial({ color: 0xfff4b8, transparent: true, opacity: 0.65, depthWrite: false });\n    const motes = new THREE.InstancedMesh(moteGeo, moteMat, moteCount);\n    const moteData = [];\n    const moteDummy = new THREE.Object3D();\n    for (let i = 0; i < moteCount; i++) {\n      moteData.push({ a: Math.random() * Math.PI * 2, r: rand(4, 22), y: rand(-10, 35), sp: rand(0.4, 1.1), ph: Math.random() * 6 });\n    }\n    scene.add(motes);\n    let trailTimer = 0;",
+        "why": "Look: add an InstancedMesh of glowing floating sky-motes around the climb path with a single draw call."
+      },
+      {
+        "find": "      const r = Math.max(0.95, rand(1.25, 1.75) - diff * 0.42);\n      let up, gap;\n      if (prev.type === \"spring\") { up = rand(4.5, 5.8); gap = rand(0.5, 1.5); }\n      else { up = rand(0.55, 1.1 + 0.45 * diff); gap = rand(0.95, 2.3 + 0.65 * diff - up * 0.45); }",
+        "replace": "      const r = Math.max(1.05, rand(1.3, 1.8) - diff * 0.36) + (type === \"moving\" ? 0.22 : 0);\n      let up, gap;\n      if (prev.type === \"spring\") { up = rand(4.5, 5.8); gap = rand(0.5, 1.5); }\n      else { up = rand(0.55, 1.05 + 0.4 * diff); gap = rand(0.9, 2.1 + 0.55 * diff - up * 0.45); }",
+        "why": "Fix: give moving platforms a wider landing radius and slightly tighter gap so mid-air drift doesn't cause unfair misses."
+      },
+      {
+        "find": "      if (type === \"moving\") {\n        // Drift sideways to the approach so the gap stays fair.\n        pl.ax = -Math.sin(gen.ang); pl.az = Math.cos(gen.ang); pl.amp = rand(1.0, 1.85);\n      }",
+        "replace": "      if (type === \"moving\") {\n        // Drift sideways to the approach so the gap stays fair.\n        pl.ax = -Math.sin(gen.ang); pl.az = Math.cos(gen.ang); pl.amp = rand(0.65, 1.15); pl.speed = rand(0.65, 1.05);\n      }",
+        "why": "Fix: reduce lateral drift amplitude and speed on moving platforms so they don't move completely out from under a jump."
+      },
+      {
+        "find": "      p.ground = pl; p.sq = 0.7;\n      maxY = Math.max(maxY, pl.y);",
+        "replace": "      p.ground = pl; p.sq = 0.7;\n      p.vx *= 0.35; p.vz *= 0.35;\n      maxY = Math.max(maxY, pl.y);",
+        "why": "Fix: damp horizontal momentum on landing so the player settles cleanly on the island without needing extra braking steps."
+      },
+      {
+        "find": "      prop.rotation.y += dt * (p.ground ? 6 + sp * 1.5 : 22);\n      const blink = (time % 3400) < 110 ? 0.12 : 1;\n      eyeL.scale.y = eyeR.scale.y = blink;",
+        "replace": "      prop.rotation.y += dt * (p.ground ? 6 + sp * 1.5 : 22);\n      const stride = p.ground ? Math.sin(time * 0.018) * Math.min(1, sp / SPEED) * 0.16 : 0.12;\n      footL.position.z = 0.06 + stride; footR.position.z = 0.06 - stride;\n      if (!p.ground) { trailTimer -= dt; if (trailTimer <= 0) { trailTimer = 0.055; burst(p.x, p.y + 0.1, p.z, 1, 0.22); } }\n      for (let i = 0; i < moteCount; i++) {\n        const md = moteData[i];\n        md.y += md.sp * dt;\n        if (md.y < p.y - 14) md.y = p.y + rand(18, 34);\n        if (md.y > p.y + 36) md.y = p.y - rand(8, 14);\n        const ang = md.a + time * 0.00025 * md.sp;\n        const sc = 0.65 + 0.45 * Math.sin(time * 0.004 + md.ph);\n        moteDummy.position.set(cam.x + Math.cos(ang) * md.r, md.y, cam.z + Math.sin(ang) * md.r);\n        moteDummy.scale.set(sc, sc, sc);\n        moteDummy.rotation.y = ang;\n        moteDummy.updateMatrix();\n        motes.setMatrixAt(i, moteDummy.matrix);\n      }\n      motes.instanceMatrix.needsUpdate = true;\n      const blink = (time % 3400) < 110 ? 0.12 : 1;\n      eyeL.scale.y = eyeR.scale.y = blink;",
+        "why": "Look: animate running feet, emit a soft airborne puff trail while jumping, and update the instanced floating sky-motes."
+      },
+      {
+        "find": "          dx: +(pl.x - p.x).toFixed(2), dy: +(pl.y - p.y).toFixed(2), dz: +(pl.z - p.z).toFixed(2),\n          radius: +pl.r.toFixed(2), gem: !!pl.gem, standingOn: p.ground === pl,",
+        "replace": "          dx: +(pl.x - p.x).toFixed(2), dy: +(pl.y - p.y).toFixed(2), dz: +(pl.z - p.z).toFixed(2),\n          vx: +(pl.type === \"moving\" && pl.active ? Math.cos(pl.t) * pl.amp * pl.speed * pl.ax : 0).toFixed(2),\n          vz: +(pl.type === \"moving\" && pl.active ? Math.cos(pl.t) * pl.amp * pl.speed * pl.az : 0).toFixed(2),\n          radius: +pl.r.toFixed(2), gem: !!pl.gem, standingOn: p.ground === pl,",
+        "why": "Fix: expose moving platform velocity (vx, vz) in snapshotState so the playtest agent can lead jumps onto drifting islands."
+      }
+    ],
+    "skipped": [],
+    "createdAt": "2026-10-25T21:52:21.607Z"
+  },
+  {
+    "version": 6,
+    "parent": 5,
+    "iteration": null,
+    "summary": "Lab: restored the original difficulty. Argon's bug fixes and visual upgrades are kept; difficulty is now locked.",
+    "bugs": [],
+    "edits": [
+      {
+        "find": "",
+        "replace": "",
+        "why": "Restore: physics: const G = 30, JUMP = 12.6, SPRING = 22, SPEED = 5.8  →  const G = 32, JUMP = 12.5, SPRING = 22, SPEED = 7.2"
+      },
+      {
+        "find": "",
+        "replace": "",
+        "why": "Restore: acceleration: const acc = (p.ground ? 75 : 58) * dt;  →  const acc = (p.ground ? 55 : 28) * dt;"
+      },
+      {
+        "find": "",
+        "replace": "",
+        "why": "Restore: short jump: if (!keys.jumpHeld && p.vy > 0 && !p.springing && !HARNESS) p.vy -= G * 0.65 * dt;  →  if (!keys.jumpHeld && p.vy > 0 && !p.springing) p.vy -= G * 1.4 * dt;"
+      },
+      {
+        "find": "",
+        "replace": "",
+        "why": "Restore: platform size: const r = Math.max(1.05, rand(1.3, 1.8) - diff * 0.36) + (type === \"moving\" ? 0.22 : 0);  →  const r = Math.max(0.85, rand(1.15, 1.65) - diff * 0.45);"
+      },
+      {
+        "find": "",
+        "replace": "",
+        "why": "Restore: spring gap: if (prev.type === \"spring\") { up = rand(4.5, 5.8); gap = rand(0.5, 1.5); }  →  if (prev.type === \"spring\") { up = rand(4.5, 6); gap = rand(0.5, 1.6); }"
+      },
+      {
+        "find": "",
+        "replace": "",
+        "why": "Restore: gap and height: else { up = rand(0.55, 1.05 + 0.4 * diff); gap = rand(0.9, 2.1 + 0.55 * diff - up * 0.45); }  →  else { up = rand(0.5, 1.15 + 0.5 * diff); gap = rand(0.7, 2.6 + 0.8 * diff - up * 0.5); }"
+      },
+      {
+        "find": "",
+        "replace": "",
+        "why": "Restore: turn angle: gen.ang += rand(-1.05, 1.05);  →  gen.ang += rand(-1.3, 1.3);"
+      },
+      {
+        "find": "",
+        "replace": "",
+        "why": "Restore: recentre angle: gen.ang = Math.atan2(-prev.z, -prev.x) + rand(-0.6, 0.6);  →  gen.ang = Math.atan2(-prev.z, -prev.x) + rand(-0.7, 0.7);"
+      },
+      {
+        "find": "",
+        "replace": "",
+        "why": "Restore: moving drift: pl.ax = -Math.sin(gen.ang); pl.az = Math.cos(gen.ang); pl.amp = rand(0.65, 1.15); pl.speed = rand(0.65, 1.05);  →  pl.ax = -Math.sin(gen.ang); pl.az = Math.cos(gen.ang); pl.amp = rand(1.2, 2.2);"
+      },
+      {
+        "find": "",
+        "replace": "",
+        "why": "Restore: stay-on tolerance: g.r + 0.34 → g.r + 0.2"
+      },
+      {
+        "find": "",
+        "replace": "",
+        "why": "Restore: landing tolerance: pl.r + 0.42 → pl.r + 0.25"
+      },
+      {
+        "find": "",
+        "replace": "",
+        "why": "Restore: landing tolerance: pl.r + 0.42 → pl.r + 0.25"
+      },
+      {
+        "find": "",
+        "replace": "",
+        "why": "Restore: removed landing momentum damping: p.vx *= 0.35; p.vz *= 0.35;"
+      }
+    ],
+    "skipped": [],
+    "createdAt": "2026-10-25T21:55:12.604Z"
+  },
+  {
+    "version": 7,
+    "parent": 6,
+    "iteration": 5,
+    "summary": "Fixed frozen landing shockwave rings, gem bobbing, spring pad rebound, and sun orb positioning between steps by moving their visual updates into updateVisuals, and enhanced island visuals with hanging root stalactites, glowing gem sparkles, and animated character arms.",
+    "bugs": [
+      {
+        "title": "Landing shockwave ring, gem spin/bob, spring pad rebound, and sun orb position freeze while player waits",
+        "evidence": "0:00 landing ring on platform 43 and gem on nearby platform freeze between steps because ringLife, pl.gem, pl.pad, and orbGroup.position were updated in updatePlayer/updatePlatforms instead of updateVisuals",
+        "severity": "medium"
+      },
+      {
+        "title": "Not a bug: Missed jump to platform 44",
+        "evidence": "0:01 jumped toward platform 44 from platform 43 with suboptimal trajectory and missed the edge",
+        "severity": "low"
+      }
+    ],
+    "edits": [
+      {
+        "find": "    const geoRim = new THREE.CylinderGeometry(1.03, 1.0, 0.14, 12);",
+        "replace": "    const geoRim = new THREE.CylinderGeometry(1.03, 1.0, 0.14, 12);\n    const geoRoot = new THREE.ConeGeometry(0.18, 0.65, 5);",
+        "why": "Look: add geometry for hanging rock stalactites/roots under floating islands"
+      },
+      {
+        "find": "    const footL = new THREE.Mesh(footGeo, footMat), footR = new THREE.Mesh(footGeo, footMat);\n    footL.position.set(-0.2, 0.07, 0.06); footR.position.set(0.2, 0.07, 0.06);\n    cube.castShadow = true; cube.receiveShadow = true;\n    body.add(cube, eyeL, eyeR, chL, chR, hatCap, prop, footL, footR);",
+        "replace": "    const footL = new THREE.Mesh(footGeo, footMat), footR = new THREE.Mesh(footGeo, footMat);\n    footL.position.set(-0.2, 0.07, 0.06); footR.position.set(0.2, 0.07, 0.06);\n    const armGeo = new THREE.BoxGeometry(0.14, 0.32, 0.16);\n    const armMat = mat(0xf5b82e, { roughness: 0.6 });\n    const armL = new THREE.Mesh(armGeo, armMat), armR = new THREE.Mesh(armGeo, armMat);\n    armL.position.set(-0.47, 0.38, 0); armR.position.set(0.47, 0.38, 0);\n    cube.castShadow = true; cube.receiveShadow = true;\n    body.add(cube, eyeL, eyeR, chL, chR, hatCap, prop, footL, footR, armL, armR);",
+        "why": "Look: give the character cute swinging side arms"
+      },
+      {
+        "find": "      g.add(top, rim, rock);",
+        "replace": "      g.add(top, rim, rock);\n      for (let i = 0; i < 3; i++) {\n        const rt = new THREE.Mesh(geoRoot, rockMat);\n        const a = (i / 3) * Math.PI * 2 + rand(-0.4, 0.4), d = rand(0.42, 0.72) * r;\n        rt.scale.set(r * 0.7, r * rand(0.7, 1.25), r * 0.7);\n        rt.rotation.x = Math.PI;\n        rt.position.set(Math.cos(a) * d, -0.35 - r * 0.35, Math.sin(a) * d);\n        g.add(rt);\n      }",
+        "why": "Look: add hanging rock stalactites beneath each island for richer 3D silhouette"
+      },
+      {
+        "find": "        const gm = new THREE.Mesh(geoGem, gemMat);\n        const halo = new THREE.Mesh(geoGemHalo, gemHaloMat);\n        gm.add(halo);\n        gm.position.y = 1.1;\n        pl.g.add(gm); pl.gem = gm;",
+        "replace": "        const gm = new THREE.Mesh(geoGem, gemMat);\n        const halo = new THREE.Mesh(geoGemHalo, gemHaloMat);\n        const ring = new THREE.Mesh(geoRing, gemHaloMat);\n        ring.scale.set(0.95, 0.95, 1);\n        gm.add(halo, ring);\n        gm.position.y = 1.1;\n        pl.g.add(gm); pl.gem = gm;",
+        "why": "Look: add an orbiting shimmer ring around collectible gems"
+      },
+      {
+        "find": "        if (pl.pad) pl.pad.position.y = lerp(pl.pad.position.y, 0.24, Math.min(1, dt * 10));\n        if (pl.gem) { pl.gem.rotation.y += dt * 2; pl.gem.position.y = 1.1 + Math.sin(pl.t * 2 + performance.now() / 400) * 0.1; }",
+        "replace": "        // pad and gem visual animation moved to updateVisuals so they never freeze between steps",
+        "why": "Fix: prevent spring pad rebound and gem spin/bob from freezing between harness steps"
+      },
+      {
+        "find": "      if (ringLife > 0) {\n        ringLife = Math.max(0, ringLife - dt);\n        const prog = 1 - ringLife / 0.35;\n        const sc = 0.6 + prog * 2.1;\n        landRing.scale.set(sc, sc, 1);\n        ringMat.opacity = (1 - prog) * 0.7;\n        if (ringLife <= 0) landRing.visible = false;\n      }\n      orbGroup.position.set(cam.x - 36, cam.y + 28, cam.z - 68);",
+        "replace": "      // ringLife and orbGroup updates moved to updateVisuals",
+        "why": "Fix: prevent landing shockwave ring and sun orb position from freezing while waiting"
+      },
+      {
+        "find": "      const stride = p.ground ? Math.sin(time * 0.018) * Math.min(1, sp / SPEED) * 0.16 : 0.12;\n      footL.position.z = 0.06 + stride; footR.position.z = 0.06 - stride;",
+        "replace": "      const stride = p.ground ? Math.sin(time * 0.018) * Math.min(1, sp / SPEED) * 0.16 : 0.12;\n      footL.position.z = 0.06 + stride; footR.position.z = 0.06 - stride;\n      const armSwing = p.ground ? Math.sin(time * 0.018) * Math.min(1, sp / SPEED) * 0.55 : -0.65;\n      armL.rotation.x = -armSwing; armR.rotation.x = armSwing;\n      armL.rotation.z = p.ground ? 0.12 : 0.45; armR.rotation.z = p.ground ? -0.12 : -0.45;\n      if (ringLife > 0) {\n        ringLife = Math.max(0, ringLife - dt);\n        const prog = 1 - ringLife / 0.35;\n        const sc = 0.6 + prog * 2.1;\n        landRing.scale.set(sc, sc, 1);\n        ringMat.opacity = (1 - prog) * 0.7;\n        if (ringLife <= 0) landRing.visible = false;\n      }\n      for (const pl of platforms) {\n        if (pl.pad) pl.pad.position.y = lerp(pl.pad.position.y, 0.24, Math.min(1, dt * 10));\n        if (pl.gem) {\n          pl.gem.rotation.y += dt * 2.2;\n          pl.gem.position.y = 1.1 + Math.sin(pl.t * 2 + time * 0.0035) * 0.12;\n          if (pl.gem.children[1]) pl.gem.children[1].rotation.x = time * 0.004;\n        }\n      }",
+        "why": "Fix: animate landing shockwave ring, spring pads, and gems in updateVisuals, and animate character arms"
+      },
+      {
+        "find": "      camera.lookAt(cam.x, cam.y + 0.6, cam.z);\n      stars.position.copy(camera.position);",
+        "replace": "      camera.lookAt(cam.x, cam.y + 0.6, cam.z);\n      orbGroup.position.set(cam.x - 36, cam.y + 28, cam.z - 68);\n      const orbPulse = 1 + 0.05 * Math.sin(time * 0.0025);\n      orbHalo.scale.set(orbPulse, orbPulse, orbPulse);\n      stars.position.copy(camera.position);",
+        "why": "Fix: update sky orb position in updateVisuals after camera updates and add a gentle halo pulse"
+      }
+    ],
+    "skipped": [],
+    "createdAt": "2026-10-25T21:56:33.771Z",
+    "watchedRecording": "run-005-v6-2m.webm"
+  }
+]

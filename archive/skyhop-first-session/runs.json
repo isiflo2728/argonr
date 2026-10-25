@@ -1,0 +1,55 @@
+[
+  {
+    "iteration": 1,
+    "version": 2,
+    "height": 16,
+    "gems": 2,
+    "steps": 40,
+    "outcome": "ran out of steps",
+    "errors": 0,
+    "recording": "run-001-v2-16m.webm"
+  },
+  {
+    "iteration": 2,
+    "version": 2,
+    "height": 0,
+    "gems": 2,
+    "steps": 6,
+    "outcome": "fell from normal",
+    "errors": 0,
+    "recording": null
+  },
+  {
+    "iteration": 3,
+    "version": 4,
+    "height": 11,
+    "gems": 2,
+    "steps": 16,
+    "outcome": "fell from normal",
+    "errors": 0,
+    "fps": 120,
+    "recording": null
+  },
+  {
+    "iteration": 4,
+    "version": 5,
+    "height": 6,
+    "gems": 2,
+    "steps": 17,
+    "outcome": "fell from moving",
+    "errors": 0,
+    "fps": 120,
+    "recording": null
+  },
+  {
+    "iteration": 5,
+    "version": 6,
+    "height": 2,
+    "gems": 0,
+    "steps": 5,
+    "outcome": "fell from normal",
+    "errors": 0,
+    "fps": 120,
+    "recording": "run-005-v6-2m.webm"
+  }
+]

@@ -1,0 +1,68 @@
+[
+  {
+    "iteration": 1,
+    "version": 1,
+    "metric": 5,
+    "metricLabel": "steps",
+    "steps": 5,
+    "outcome": "game over at 0 m",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "loadErrors": 1,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-001-v1.mp4"
+  },
+  {
+    "iteration": 2,
+    "version": 2,
+    "metric": 5,
+    "metricLabel": "steps",
+    "steps": 5,
+    "outcome": "game over at 0 m",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": null
+  },
+  {
+    "iteration": 3,
+    "version": 3,
+    "metric": 6,
+    "metricLabel": "steps",
+    "steps": 6,
+    "outcome": "game over at 0 m",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": null
+  },
+  {
+    "iteration": 4,
+    "version": 3,
+    "metric": 1,
+    "metricLabel": "m",
+    "steps": 10,
+    "outcome": "Argon ended the run",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "Cannot read properties of null (reading 'position')"
+    ],
+    "loadErrors": 0,
+    "suspected": [
+      {
+        "step": 9,
+        "note": "Collecting a gem throws 'Cannot read properties of null (reading position)' and HUD still displays Gems 0 instead of 1."
+      },
+      {
+        "step": 10,
+        "note": "Game loop permanently freezes when collecting a gem due to uncaught TypeError reading 'position' of null."
+      }
+    ],
+    "recording": null
+  }
+]

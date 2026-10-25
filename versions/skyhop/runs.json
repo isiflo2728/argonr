@@ -1,0 +1,303 @@
+[
+  {
+    "iteration": 1,
+    "version": 1,
+    "metric": 8,
+    "metricLabel": "steps",
+    "steps": 8,
+    "outcome": "Argon ended the run",
+    "errors": [
+      "Cannot read properties of null (reading 'position')"
+    ],
+    "loadErrors": 0,
+    "suspected": [
+      {
+        "step": 3,
+        "note": "Status is 'over' after falling, but no Game Over UI overlay or restart prompt is visible on screen."
+      },
+      {
+        "step": 7,
+        "note": "Collecting a gem throws 'Cannot read properties of null (reading position)' and fails to update the HUD (shows Gems 0 while state has gems: 1)."
+      },
+      {
+        "step": 8,
+        "note": "Game loop is completely frozen after the gem collection TypeError; player coordinates and velocities no longer update."
+      }
+    ],
+    "recording": "/recordings/skyhop/run-001-v1.mp4"
+  },
+  {
+    "iteration": 2,
+    "version": 2,
+    "metric": 2,
+    "metricLabel": "m",
+    "steps": 7,
+    "outcome": "game over at 2 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-002-v2-2m.mp4"
+  },
+  {
+    "iteration": 3,
+    "version": 3,
+    "metric": 5,
+    "metricLabel": "steps",
+    "steps": 5,
+    "outcome": "game over at 0 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-003-v3.mp4"
+  },
+  {
+    "iteration": 4,
+    "version": 3,
+    "metric": 1,
+    "metricLabel": "m",
+    "steps": 5,
+    "outcome": "game over at 1 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [
+      {
+        "step": 5,
+        "note": "Player slipped off platform after landing despite grounded=true at end of jump, possibly excessive horizontal momentum/low friction."
+      }
+    ],
+    "recording": "/recordings/skyhop/run-004-v3-1m.mp4"
+  },
+  {
+    "iteration": 5,
+    "version": 3,
+    "metric": 3,
+    "metricLabel": "m",
+    "steps": 6,
+    "outcome": "game over at 3 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [
+      {
+        "step": 4,
+        "note": "Camera view is heavily obstructed/clipping behind a nearby floating island platform."
+      },
+      {
+        "step": 6,
+        "note": "Player slid off the moving platform while standing on it, and no game-over UI overlay is visible despite status being 'over'."
+      }
+    ],
+    "recording": "/recordings/skyhop/run-005-v3-3m.mp4"
+  },
+  {
+    "iteration": 6,
+    "version": 3,
+    "metric": 2,
+    "metricLabel": "m",
+    "steps": 4,
+    "outcome": "game over at 2 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [
+      {
+        "step": 4,
+        "note": "Game state is 'over' after falling, but no Game Over UI overlay is visible on screen."
+      }
+    ],
+    "recording": "/recordings/skyhop/run-006-v3-2m.mp4"
+  },
+  {
+    "iteration": 7,
+    "version": 3,
+    "metric": 2,
+    "metricLabel": "m",
+    "steps": 6,
+    "outcome": "game over at 2 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [
+      {
+        "step": 3,
+        "note": "Game state is 'over' after falling off, but no Game Over UI overlay is displayed."
+      },
+      {
+        "step": 6,
+        "note": "Game state is 'over' after falling off, but no Game Over UI overlay or restart prompt is displayed."
+      }
+    ],
+    "recording": "/recordings/skyhop/run-007-v3-2m.mp4"
+  },
+  {
+    "iteration": 8,
+    "version": 3,
+    "metric": 6,
+    "metricLabel": "m",
+    "steps": 11,
+    "outcome": "game over at 6 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-008-v3-6m.mp4"
+  },
+  {
+    "iteration": 9,
+    "version": 3,
+    "metric": 1,
+    "metricLabel": "m",
+    "steps": 4,
+    "outcome": "game over at 1 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [
+      {
+        "step": 2,
+        "note": "Camera starts clipped inside the white ground/platform geometry, completely hiding the player character."
+      },
+      {
+        "step": 4,
+        "note": "When status is 'over', no game-over UI or restart prompt appears on screen."
+      }
+    ],
+    "recording": "/recordings/skyhop/run-009-v3-1m.mp4"
+  },
+  {
+    "iteration": 10,
+    "version": 3,
+    "metric": 13,
+    "metricLabel": "m",
+    "steps": 18,
+    "outcome": "game over at 13 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [
+      {
+        "step": 11,
+        "note": "Camera clips behind the underside of an overhead platform, blocking most of the screen and hiding the player."
+      },
+      {
+        "step": 18,
+        "note": "When status is 'over', no game-over message or restart prompt is displayed on screen (or player slipped off moving platform while idle)."
+      }
+    ],
+    "recording": "/recordings/skyhop/run-010-v3-13m.mp4"
+  },
+  {
+    "iteration": 11,
+    "version": 3,
+    "metric": 3,
+    "metricLabel": "m",
+    "steps": 7,
+    "outcome": "game over at 0 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-011-v3-3m.mp4"
+  },
+  {
+    "iteration": 12,
+    "version": 3,
+    "metric": 3,
+    "metricLabel": "m",
+    "steps": 9,
+    "outcome": "game over at 3 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-012-v3-3m.mp4"
+  },
+  {
+    "iteration": 13,
+    "version": 3,
+    "metric": 2,
+    "metricLabel": "m",
+    "steps": 6,
+    "outcome": "game over at 0 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-013-v3-2m.mp4"
+  },
+  {
+    "iteration": 14,
+    "version": 3,
+    "metric": 2,
+    "metricLabel": "m",
+    "steps": 7,
+    "outcome": "game over at 2 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-014-v3-2m.mp4"
+  },
+  {
+    "iteration": 15,
+    "version": 3,
+    "metric": 2,
+    "metricLabel": "m",
+    "steps": 6,
+    "outcome": "game over at 2 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-015-v3-2m.mp4"
+  },
+  {
+    "iteration": 16,
+    "version": 3,
+    "metric": 1,
+    "metricLabel": "m",
+    "steps": 7,
+    "outcome": "game over at 0 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-016-v3-1m.mp4"
+  },
+  {
+    "iteration": 17,
+    "version": 3,
+    "metric": 1,
+    "metricLabel": "m",
+    "steps": 7,
+    "outcome": "game over at 0 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-017-v3-1m.mp4"
+  },
+  {
+    "iteration": 18,
+    "version": 3,
+    "metric": 3,
+    "metricLabel": "m",
+    "steps": 7,
+    "outcome": "game over at 3 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-018-v3-3m.mp4"
+  },
+  {
+    "iteration": 19,
+    "version": 3,
+    "metric": 4,
+    "metricLabel": "steps",
+    "steps": 4,
+    "outcome": "game over at 0 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-019-v3.mp4"
+  },
+  {
+    "iteration": 20,
+    "version": 3,
+    "metric": 10,
+    "metricLabel": "m",
+    "steps": 17,
+    "outcome": "game over at 10 m",
+    "errors": [],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-020-v3-10m.mp4"
+  }
+]

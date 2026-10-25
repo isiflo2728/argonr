@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-  /* Layout: game stage on the left with live readouts beneath; iteration timeline on the right. */
+  /* Layout: live game feed on the left with readouts and log beneath; scorecard, chart and iteration cards on the right. */
   :root {
     --bg: #0e1016;
     --panel: #161a23;
@@ -28,13 +28,10 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--body); }
-  button, input, select { font: inherit; color: inherit; }
+  button, input, select, textarea { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid var(--argon); outline-offset: 2px; }
 
-  header {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
-    padding: 12px 20px; border-bottom: 1px solid var(--line);
-  }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
   .brand { font: 700 20px var(--display); letter-spacing: 0.04em; text-transform: uppercase; display: flex; align-items: center; gap: 10px; }
   .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--argon); box-shadow: 0 0 12px var(--argon); }
   .pill { font: 500 12px var(--mono); padding: 3px 9px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
@@ -44,41 +41,47 @@
   @keyframes blink { 50% { opacity: 0.4; } }
   .controls { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
   .field { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
-  .field input[type=number], .field select { width: 64px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; text-transform: none; letter-spacing: 0; font-size: 13px; }
-  .field select { width: auto; }
+  .field input[type=number], .field select, .field input[type=text] { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; text-transform: none; letter-spacing: 0; font-size: 13px; }
+  .field input[type=number] { width: 64px; }
   .btn { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; font-weight: 600; }
   .btn:hover { border-color: var(--muted); }
   .btn.primary { background: var(--argon); color: #08131f; border-color: var(--argon); }
   .btn:disabled { opacity: 0.45; cursor: default; }
+  .btn.danger { border-color: color-mix(in srgb, var(--bad) 50%, transparent); color: var(--bad); }
+  .btn.danger.armed { background: var(--bad); color: #1a0608; }
 
-  main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; padding: 16px 20px 20px; align-items: start; }
-  @media (max-width: 1000px) { main { grid-template-columns: minmax(0, 1fr); } }
+  .target { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .target .field input[type=text] { width: min(460px, 60vw); }
+  .target .hint { color: var(--muted); font-size: 12px; }
+
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 16px; padding: 16px 20px 20px; align-items: start; }
+  @media (max-width: 1000px) {
+    /* Narrow (side-by-side with the game window): one column, scorecard right under the feed */
+    main { grid-template-columns: minmax(0, 1fr); }
+    main > section, main > aside { display: contents; }
+    .stage { order: 1; } .readouts { order: 2; margin-top: 0; } #plantedPanel { order: 3; } .panel:has(#chart) { order: 4; } .panel:has(#cards) { order: 5; } .log { order: 6; margin-top: 0; }
+    header { padding: 10px 14px; } .target { padding: 8px 14px; } main { padding: 12px 14px 16px; gap: 12px; }
+  }
 
   .stage { position: relative; aspect-ratio: 16 / 10; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: #000; }
-  .stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-  .stage .shield { position: absolute; inset: 0; }
+  .stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+  .stage .idle { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); text-align: center; padding: 20px; }
   .ov { position: absolute; pointer-events: none; }
   .iterTag { left: 14px; bottom: 14px; display: grid; gap: 2px; }
   .iterTag b { font: 700 28px/1 var(--display); text-transform: uppercase; letter-spacing: 0.04em; text-shadow: 0 2px 10px rgba(0,0,0,0.6); }
   .iterTag span { font: 500 12px var(--mono); color: #fff; opacity: 0.85; text-shadow: 0 1px 6px rgba(0,0,0,0.8); }
-  .thought {
-    right: 14px; bottom: 14px; max-width: min(420px, 60%);
-    background: rgba(14, 16, 22, 0.82); border: 1px solid color-mix(in srgb, var(--argon) 50%, transparent);
-    border-radius: 12px 12px 2px 12px; padding: 9px 12px; font-size: 13px;
-    transition: opacity 0.2s;
-  }
+  .thought { right: 14px; bottom: 14px; max-width: min(440px, 60%); background: rgba(14,16,22,0.85); border: 1px solid color-mix(in srgb, var(--argon) 50%, transparent); border-radius: 12px 12px 2px 12px; padding: 9px 12px; font-size: 13px; transition: opacity 0.2s; }
   .thought .who { font: 600 11px var(--mono); color: var(--argon); text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 2px; }
-  .compass { right: 14px; top: 14px; display: flex; align-items: center; gap: 8px; background: rgba(14,16,22,0.7); border-radius: 10px; padding: 6px 10px 6px 6px; font: 500 12px var(--mono); }
-  .jumpLed { padding: 2px 7px; border-radius: 5px; border: 1px solid var(--line); color: var(--muted); }
-  .jumpLed.lit { background: var(--sun); color: #1d1838; border-color: var(--sun); }
+  .thought .sus { display: block; margin-top: 4px; color: var(--warn); font-size: 12px; }
+  .inputs { right: 14px; top: 14px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 60%; }
+  .key { font: 500 12px var(--mono); padding: 3px 8px; border-radius: 6px; background: rgba(14,16,22,0.8); border: 1px solid var(--line); color: var(--text); }
+  .key.hold { border-color: var(--sun); color: var(--sun); }
+  .key.click { border-color: var(--argon); color: var(--argon); }
+  .cursor { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; border: 2px solid var(--argon); box-shadow: 0 0 0 4px rgba(124,196,255,0.25); pointer-events: none; opacity: 0; transition: opacity 0.4s; }
 
-  .banner {
-    position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
-    background: radial-gradient(circle at 50% 45%, rgba(14,16,22,0.78), rgba(14,16,22,0.95));
-    opacity: 0; pointer-events: none; transition: opacity 0.35s;
-  }
+  .banner { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; background: radial-gradient(circle at 50% 45%, rgba(14,16,22,0.78), rgba(14,16,22,0.95)); opacity: 0; pointer-events: none; transition: opacity 0.35s; }
   .banner.show { opacity: 1; }
-  .banner .inner { display: grid; gap: 10px; max-width: 560px; padding: 0 20px; transform: translateY(8px); transition: transform 0.5s cubic-bezier(.2,.8,.2,1); }
+  .banner .inner { display: grid; gap: 10px; max-width: 600px; padding: 0 20px; transform: translateY(8px); transition: transform 0.5s cubic-bezier(.2,.8,.2,1); }
   .banner.show .inner { transform: none; }
   .banner .eyebrow { font: 500 12px var(--mono); color: var(--argon); text-transform: uppercase; letter-spacing: 0.2em; }
   .banner h2 { margin: 0; font: 700 clamp(40px, 7vw, 76px)/0.95 var(--display); text-transform: uppercase; letter-spacing: 0.02em; }
@@ -93,25 +96,35 @@
   .readouts b { font: 700 22px var(--display); font-variant-numeric: tabular-nums; }
   @media (max-width: 600px) { .readouts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
-  .log { margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; height: 200px; overflow: auto; padding: 8px 12px; font: 12px/1.6 var(--mono); }
+  .log { margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; height: 220px; overflow: auto; padding: 8px 12px; font: 12px/1.6 var(--mono); }
   .log div { white-space: pre-wrap; word-break: break-word; }
   .log .t { color: var(--muted); }
   .log .k-argon { color: var(--argon); }
-  .log .k-land { color: var(--good); }
-  .log .k-death, .log .k-error { color: var(--bad); }
-  .log .k-gem { color: #ff8fab; }
+  .log .k-error { color: var(--bad); }
+  .log .k-bug { color: var(--warn); }
   .log .k-sys { color: var(--sun); }
 
   aside { display: grid; gap: 12px; min-width: 0; }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; }
-  .panel h3 { margin: 0 0 10px; font: 700 13px var(--display); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+  .panel h3 { margin: 0 0 10px; font: 700 13px var(--display); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .panel h3 .score { margin-left: auto; font: 700 18px var(--display); color: var(--good); letter-spacing: 0; }
+  .empty { color: var(--muted); font-size: 13px; }
+  .planted { display: grid; gap: 6px; }
+  .pb { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); transition: border-color 0.4s; }
+  .pb .box { width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--muted); display: grid; place-items: center; font: 700 13px var(--mono); }
+  .pb.fixed { border-color: color-mix(in srgb, var(--good) 50%, transparent); }
+  .pb.fixed .box { background: var(--good); border-color: var(--good); color: #08131f; }
+  .pb.fixed .box::after { content: "✓"; }
+  .pb b { font-weight: 600; font-size: 13px; }
+  .pb small { display: block; color: var(--muted); font-size: 12px; }
+  .pb .when { font: 500 11px var(--mono); color: var(--good); }
+  .pb .lock { font: 500 11px var(--mono); color: var(--muted); }
+
   .chart { display: flex; align-items: flex-end; gap: 6px; height: 110px; }
   .chart .bar { flex: 1; display: grid; grid-template-rows: auto 1fr auto; gap: 3px; height: 100%; min-width: 0; text-align: center; }
   .chart .bar i { align-self: end; display: block; background: var(--argon); border-radius: 4px 4px 0 0; min-height: 2px; transition: height 0.6s cubic-bezier(.2,.8,.2,1); }
-  .chart .bar.live i { background: var(--sun); }
-  .chart .bar em { font: 500 11px var(--mono); font-style: normal; color: var(--text); }
+  .chart .bar em { font: 500 11px var(--mono); font-style: normal; }
   .chart .bar small { font: 11px var(--mono); color: var(--muted); }
-  .empty { color: var(--muted); font-size: 13px; }
 
   .cards { display: grid; gap: 10px; }
   .card { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; background: var(--bg); animation: enter 0.45s cubic-bezier(.2,.8,.2,1); }
@@ -119,11 +132,12 @@
   @keyframes enter { from { opacity: 0; transform: translateY(-6px); } }
   .card .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .card .top b { font: 700 16px var(--display); text-transform: uppercase; letter-spacing: 0.04em; }
+  .card a { color: var(--argon); font-size: 12px; }
   .status { margin-left: auto; font: 500 11px var(--mono); padding: 2px 8px; border-radius: 99px; background: var(--line); }
   .status.playing { background: color-mix(in srgb, var(--sun) 22%, transparent); color: var(--sun); }
   .status.fixing { background: color-mix(in srgb, var(--argon) 22%, transparent); color: var(--argon); }
   .status.done { background: color-mix(in srgb, var(--good) 20%, transparent); color: var(--good); }
-  .status.failed { background: color-mix(in srgb, var(--bad) 20%, transparent); color: var(--bad); }
+  .status.failed, .status.stopped { background: color-mix(in srgb, var(--bad) 20%, transparent); color: var(--bad); }
   .stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 12px var(--mono); color: var(--muted); }
   .stats b { color: var(--text); font-weight: 500; }
   .fixes { border-top: 1px dashed var(--line); padding-top: 8px; display: grid; gap: 6px; }
@@ -141,50 +155,60 @@
   .diff .del { background: color-mix(in srgb, var(--bad) 14%, transparent); color: #ffb3bd; }
   .diff .add { background: color-mix(in srgb, var(--good) 14%, transparent); color: #b6f0d1; }
   .note { font-size: 12px; color: var(--warn); }
-  .card a { color: var(--argon); font-size: 12px; }
+  .note.ok { color: var(--argon); }
 </style>
 </head>
 <body>
 <header>
   <div class="brand"><span class="dot"></span>Argon Playtest Lab</div>
   <span class="pill" id="modelPill">Checking Argon…</span>
-  <span class="pill" id="buildPill">Build v1</span>
+  <span class="pill" id="buildPill" hidden></span>
   <span class="pill rec" id="recPill" hidden>● REC</span>
   <div class="controls">
-    <label class="field" for="brain">Player
-      <select id="brain">
-        <option value="argon">Argon</option>
-        <option value="bot">Offline bot</option>
+    <label class="field" for="player">Player
+      <select id="player">
+        <option value="argon">Argon plays</option>
+        <option value="human">You play, Argon watches</option>
       </select>
     </label>
-    <label class="field" for="iters">Iterations <input id="iters" type="number" min="1" max="50" value="5"></label>
+    <label class="field" id="watchField" for="watchEvery">Check every <input id="watchEvery" type="number" min="2" max="30" value="4"> s</label>
+    <label class="field" for="iters">Iterations <input id="iters" type="number" min="1" max="1000" value="5"></label>
     <label class="field" for="endless"><input id="endless" type="checkbox"> Keep going</label>
     <label class="field" for="maxSteps">Steps <input id="maxSteps" type="number" min="5" max="500" value="40"></label>
-    <label class="field" for="speed">Speed
-      <select id="speed"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select>
-    </label>
-    <label class="field" for="shots"><input id="shots" type="checkbox" checked> Vision</label>
-    <button class="btn" id="resetBtn" type="button">Reset builds</button>
+    <label class="field" for="speed">Speed <select id="speed"><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+    <label class="field" id="idleField" for="idleSpeed">While thinking <select id="idleSpeed"><option value="0.15" selected>slow motion</option><option value="0.3">half-slow</option><option value="0">freeze</option></select></label>
+    <label class="field" for="recEvery">Record every <input id="recEvery" type="number" min="0" max="100" value="1"></label>
+    <label class="field" for="polish"><input id="polish" type="checkbox"> Polish too</label>
+    <button class="btn danger" id="restartBtn" type="button" title="Stop, wipe back to the original build, start over">Restart demo</button>
     <button class="btn" id="pauseBtn" type="button" disabled>Pause</button>
+    <button class="btn" id="endRunBtn" type="button" hidden>End run → Argon fixes</button>
     <button class="btn primary" id="startBtn" type="button">Start playtest</button>
   </div>
 </header>
 
+<div class="target">
+  <label class="field" for="kind">Game
+    <select id="kind">
+      <option value="local">Local game</option>
+      <option value="url">Any URL</option>
+    </select>
+  </label>
+  <label class="field" id="localField" for="localGame">Folder <select id="localGame"></select></label>
+  <label class="field" id="urlField" for="gameUrl" hidden>URL <input id="gameUrl" type="text" placeholder="https://example.com/game/" spellcheck="false"></label>
+  <label class="field" for="notes">Notes <input id="notes" type="text" placeholder="goal and controls, if you want to tell Argon" style="width:min(380px,50vw)"></label>
+  <label class="field" for="fresh"><input id="fresh" type="checkbox"> Start from the original</label>
+  <span class="hint" id="targetHint">Local games are copied into versions/, and Argon fixes the copy. For a URL, Argon can't edit the code, so it writes bug reports.</span>
+</div>
+
 <main>
   <section>
     <div class="stage">
-      <iframe id="frame" title="Skyhop build under test"></iframe>
-      <div class="shield"></div>
-      <div class="ov compass" aria-live="off">
-        <svg width="34" height="34" viewBox="-17 -17 34 34" aria-hidden="true">
-          <circle r="15" fill="none" stroke="#3a4256" stroke-width="1.5"></circle>
-          <g id="arrow"><path d="M0 -12 L5 3 L0 0 L-5 3 Z" fill="#7cc4ff"></path></g>
-        </svg>
-        <span id="actText">idle</span>
-        <span class="jumpLed" id="jumpLed">JUMP</span>
-      </div>
-      <div class="ov iterTag"><b id="iterLabel">Ready</b><span id="iterSub">Press Start playtest</span></div>
-      <div class="ov thought" id="thought" style="opacity:0"><span class="who" id="thoughtWho">Argon</span><span id="thoughtText"></span></div>
+      <img id="feed" alt="Live view of the game under test" hidden>
+      <div class="idle" id="idle">The game appears here while Argon plays it in a Chrome window.</div>
+      <div class="cursor" id="cursor"></div>
+      <div class="ov inputs" id="inputs"></div>
+      <div class="ov iterTag"><b id="iterLabel">Ready</b><span id="iterSub">Choose a game and press Start playtest</span></div>
+      <div class="ov thought" id="thought" style="opacity:0"><span class="who" id="thoughtWho">Argon</span><span id="thoughtText"></span><span class="sus" id="thoughtSus" hidden></span></div>
       <div class="banner" id="banner"><div class="inner">
         <div class="eyebrow" id="bEyebrow">Playtest</div>
         <h2 id="bTitle">Iteration 1</h2>
@@ -194,431 +218,312 @@
     </div>
 
     <div class="readouts">
-      <div><span>Height</span><b id="rHeight">0 m</b></div>
-      <div><span>Gems</span><b id="rGems">0</b></div>
+      <div><span>Progress</span><b id="rMetric">–</b></div>
       <div><span>Step</span><b id="rStep">0</b></div>
-      <div><span>Jumps</span><b id="rJumps">0</b></div>
-      <div><span>Issues</span><b id="rIssues">0</b></div>
+      <div><span>Page errors</span><b id="rErrors">0</b></div>
+      <div><span>Suspected bugs</span><b id="rSus">0</b></div>
+      <div><span>Builds</span><b id="rBuilds">–</b></div>
     </div>
     <div class="log" id="log" aria-live="polite"></div>
   </section>
 
   <aside>
+    <div class="panel" id="plantedPanel" hidden>
+      <h3>Planted bugs <span class="score" id="plantedScore">0 / 0</span></h3>
+      <div class="planted" id="planted"></div>
+      <p class="note ok" style="margin:8px 0 0">These 5 bugs were planted for the demo. Argon is never told about them; the lab checks each new build's source to see which are gone.</p>
+    </div>
     <div class="panel">
-      <h3>Best height per iteration</h3>
-      <div class="chart" id="chart"><div class="empty">Each run's height shows up here, so you can see whether Argon's fixes help.</div></div>
+      <h3>Progress per iteration</h3>
+      <div class="chart" id="chart"><div class="empty">Each run's result shows up here, so you can see whether Argon's fixes help.</div></div>
     </div>
     <div class="panel">
       <h3>Iterations</h3>
-      <div class="cards" id="cards"><div class="empty" id="cardsEmpty">No runs yet. Each iteration is one run by Argon, followed by Argon's bug fixes, which become the next build.</div></div>
+      <div class="cards" id="cards"><div class="empty" id="cardsEmpty">No runs yet. Each iteration is one run by Argon, followed by Argon's bug fixes (local games) or a bug report (URLs).</div></div>
     </div>
   </aside>
 </main>
 
 <script>
 const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-
-const S = { running: false, paused: false, stop: false, version: 1, argon: false, results: [], readyResolve: null };
+const S = { argon: false, games: [], session: null, runs: [], cards: new Map(), running: false };
 
 // ---------- Boot ----------
 async function boot() {
-  try {
-    const cfg = await (await fetch("/api/config")).json();
-    S.argon = cfg.argon;
-    const pill = $("modelPill");
-    pill.textContent = cfg.argon ? `Argon · ${cfg.model}` : "Argon not configured";
-    pill.className = "pill " + (cfg.argon ? "on" : "off");
-    if (!cfg.argon) {
-      $("brain").value = "bot";
-      $("brain").querySelector('option[value="argon"]').disabled = true;
-      log("sys", "Argon is not configured, so the offline bot will play and no fixes will be made. Set ARGON_API_KEY and ARGON_MODEL, then restart the server.");
-    }
-  } catch (e) {
-    log("error", "Could not reach the lab server. Start it with: node server.js");
-  }
-  await refreshVersions();
-  // Continue numbering from earlier sessions so recordings line up
-  try { S.results = await (await fetch("/api/runs")).json(); drawChart(); } catch (e) {}
-  if (S.results.length) log("sys", `Continuing after iteration ${S.results[S.results.length - 1].iteration}`);
-  await loadBuild(S.version).catch(() => {});
+  const cfg = await (await fetch("/api/config")).json().catch(() => null);
+  if (!cfg) { log("error", "Could not reach the lab server. Start it with: npm start"); return; }
+  S.argon = cfg.argon; S.games = cfg.games; S.view = cfg.view;
+  const pill = $("modelPill");
+  pill.textContent = cfg.argon ? `Argon · ${cfg.model}` : "Argon not configured";
+  pill.className = "pill " + (cfg.argon ? "on" : "off");
+  if (!cfg.argon) log("error", "Argon is not configured. Put ARGON_API_KEY and ARGON_MODEL in .env and restart the server.");
+  $("localGame").innerHTML = cfg.games.map((g) => `<option value="${esc(g.path)}">${esc(g.title)}${g.planted ? " (demo: planted bugs)" : ""}</option>`).join("") || `<option value="">No games in games/</option>`;
   const q = new URLSearchParams(location.search);
+  if (q.get("url")) { $("kind").value = "url"; $("gameUrl").value = q.get("url"); }
+  if (q.get("game")) $("localGame").value = q.get("game");
   if (q.has("endless")) $("endless").checked = true;
-  if (q.has("autostart")) runAll();
+  $("fresh").checked = q.has("fresh"); // explicit, so a restored form state can't wipe the builds by surprise
+  if (q.has("polish")) $("polish").checked = true;
+  if (q.get("steps")) $("maxSteps").value = q.get("steps");
+  if (q.get("player")) $("player").value = q.get("player");
+  syncKind(); syncPlayer();
+  if (cfg.session) applySession(cfg.session);
+  connect();
+  if (q.has("autostart") && !(cfg.session && cfg.session.running)) start();
 }
 
-async function refreshVersions() {
-  const versions = await (await fetch("/api/versions")).json();
-  const good = versions.filter((v) => !v.rejected);
-  S.version = good[good.length - 1].version;
-  $("buildPill").textContent = `Build v${S.version}` + (versions.length > 1 ? ` · ${versions.length} builds` : "");
-  return versions;
+function syncKind() {
+  const url = $("kind").value === "url";
+  $("localField").hidden = url; $("urlField").hidden = !url; $("fresh").parentElement.hidden = url;
 }
+$("kind").addEventListener("change", syncKind);
+function syncPlayer() {
+  const human = $("player").value === "human";
+  $("watchField").hidden = !human;
+  $("speed").parentElement.hidden = human; $("idleField").hidden = human;
+  $("maxSteps").previousSibling.textContent = human ? "Max checks " : "Steps ";
+  $("maxSteps").value = human ? 150 : 40;
+  $("endRunBtn").hidden = !(human && S.running);
+}
+$("player").addEventListener("change", syncPlayer);
 
-window.addEventListener("message", (e) => {
-  if (e.data && e.data.type === "skyhop-ready" && S.readyResolve) { S.readyResolve(); S.readyResolve = null; }
-});
-
-function loadBuild(v) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { S.readyResolve = null; reject(new Error(`Build v${v} did not start within 10 s`)); }, 10000);
-    S.readyResolve = () => { clearTimeout(timer); resolve($("frame").contentWindow.skyhop); };
-    $("frame").src = `/game?v=${v}&harness=1&t=${Date.now()}`;
+// ---------- Live events ----------
+function connect() {
+  const es = new EventSource("/api/events");
+  es.addEventListener("hello", (e) => { const d = JSON.parse(e.data); if (d.session) applySession(d.session); });
+  es.addEventListener("log", (e) => { const d = JSON.parse(e.data); log(d.kind, d.text); });
+  es.addEventListener("frame", (e) => {
+    const d = JSON.parse(e.data);
+    $("feed").src = "data:image/jpeg;base64," + d.data; $("feed").hidden = false; $("idle").hidden = true;
   });
+  es.addEventListener("session", (e) => applySession(JSON.parse(e.data)));
+  es.addEventListener("status", (e) => {
+    const d = JSON.parse(e.data);
+    setRunning(d.running);
+    if (d.running) {
+      $("pauseBtn").textContent = d.paused ? "Resume" : "Pause";
+      if (d.step) { $("rStep").textContent = `${d.step}/${d.maxSteps}`; $("iterSub").textContent = `${d.version ? `Build v${d.version} · ` : ""}step ${d.step}/${d.maxSteps}`; }
+    }
+  });
+  es.addEventListener("iteration", (e) => {
+    const d = JSON.parse(e.data);
+    $("iterLabel").textContent = `Iteration ${d.n}`;
+    $("rErrors").textContent = "0"; $("rSus").textContent = "0"; $("rMetric").textContent = "–";
+    errors = 0; suspects = 0;
+    const who = d.player === "human" ? "You play on" : "Running";
+    const sub = d.changes.length ? `${who} build v${d.version} with ${d.changes.length} fix${d.changes.length > 1 ? "es" : ""} by Argon from the last run:` : d.version ? `${who} build v${d.version}` : "";
+    banner(`${d.player === "human" ? "Your turn" : "Playtest"}${d.recorded ? " · recording" : ""}`, `Iteration ${d.n}`, sub, d.changes.slice(0, 6), d.changes.length ? 2600 : 1400);
+  });
+  es.addEventListener("action", (e) => showAction(JSON.parse(e.data)));
+  es.addEventListener("rec", (e) => { $("recPill").hidden = !JSON.parse(e.data).on; });
+  es.addEventListener("reviewing", (e) => {
+    const d = JSON.parse(e.data);
+    $("thought").style.opacity = 0; $("inputs").innerHTML = "";
+    $("iterSub").textContent = d.video ? "Argon is watching the recording and reviewing the code" : "Argon is reviewing the run";
+    banner("Between iterations", d.video ? "Argon is watching the tape" : "Argon is reviewing", d.video ? "Finding bugs in the video, the errors and the source" : "Finding bugs in the errors, the state and the source", [], 1200);
+  });
+  es.addEventListener("card", (e) => renderCard(JSON.parse(e.data)));
+  es.addEventListener("demo-restart", () => {
+    // Wipe the screen so the new recording starts from nothing
+    logEl.innerHTML = ""; S.runs = []; S.cards.clear();
+    $("cards").innerHTML = `<div class="empty" id="cardsEmpty">Restarting from the original build…</div>`;
+    $("chart").innerHTML = `<div class="empty">Each run's result shows up here, so you can see whether Argon's fixes help.</div>`;
+    $("feed").hidden = true; $("idle").hidden = false; $("thought").style.opacity = 0; $("inputs").innerHTML = "";
+    $("rMetric").textContent = "–"; $("rStep").textContent = "0"; $("rErrors").textContent = "0"; $("rSus").textContent = "0"; $("rBuilds").textContent = "–";
+    errors = 0; suspects = 0;
+    log("sys", "Demo restarting: builds and recordings archived, back to the original game");
+  });
+  es.addEventListener("planted", (e) => renderPlanted(JSON.parse(e.data)));
+  es.onerror = () => { /* EventSource reconnects on its own */ };
 }
 
-// ---------- Log & readouts ----------
+function applySession(s) {
+  S.session = s; S.runs = s.runs || [];
+  setRunning(s.running);
+  $("buildPill").hidden = !s.game.editable;
+  $("buildPill").textContent = `${s.game.title}`;
+  $("rBuilds").textContent = s.game.editable ? String(Math.max(1, ...S.runs.map((r) => r.version || 1))) : "URL";
+  $("cards").innerHTML = ""; S.cards.clear();
+  if (!s.cards.length) $("cards").innerHTML = `<div class="empty" id="cardsEmpty">Waiting for the first run…</div>`;
+  for (const c of s.cards) renderCard(c);
+  drawChart();
+  if (s.game.editable) fetch(`/api/planted?game=${s.game.id}`).then((r) => r.json()).then(renderPlanted).catch(() => {});
+}
+
+function setRunning(on) {
+  S.running = on;
+  $("startBtn").textContent = on ? "Stop" : "Start playtest";
+  $("pauseBtn").disabled = !on;
+  $("endRunBtn").hidden = !(on && (S.session?.player || $("player").value) === "human");
+  if (!on) { $("pauseBtn").textContent = "Pause"; $("recPill").hidden = true; $("iterLabel").textContent = "Ready"; $("iterSub").textContent = "Press Start playtest"; $("thought").style.opacity = 0; }
+}
+
+// ---------- Log & overlays ----------
 const logEl = $("log");
+let errors = 0, suspects = 0;
 function log(kind, text) {
+  if (kind === "error" && /^Page error/.test(text)) $("rErrors").textContent = ++errors;
+  if (kind === "bug") $("rSus").textContent = ++suspects;
   const d = document.createElement("div");
   const t = new Date().toLocaleTimeString([], { hour12: false });
-  d.innerHTML = `<span class="t">${t}</span> <span class="k-${kind}">${esc(text)}</span>`;
+  d.innerHTML = `<span class="t">${t}</span> <span class="k-${esc(kind)}">${esc(text)}</span>`;
   logEl.appendChild(d);
-  while (logEl.children.length > 400) logEl.firstChild.remove();
+  while (logEl.children.length > 500) logEl.firstChild.remove();
   logEl.scrollTop = logEl.scrollHeight;
 }
-function setReadouts(r) {
-  $("rHeight").textContent = `${r.height} m`;
-  $("rGems").textContent = r.gems;
-  $("rStep").textContent = `${r.step}/${r.max}`;
-  $("rJumps").textContent = r.jumps;
-  $("rIssues").textContent = r.issues;
-}
-function showAction(a, who) {
-  const ang = Math.atan2(a.move.x, -a.move.z) * 180 / Math.PI;
-  const mag = Math.hypot(a.move.x, a.move.z);
-  $("arrow").setAttribute("transform", `rotate(${ang.toFixed(0)}) scale(${mag > 0.05 ? 1 : 0.4})`);
-  $("actText").textContent = mag > 0.05 ? `${a.seconds.toFixed(2)} s` : "hold still";
-  $("jumpLed").classList.toggle("lit", a.jump);
-  $("thoughtWho").textContent = who;
+function showAction(a) {
+  $("thoughtWho").textContent = a.watching ? "Argon is watching" : "Argon";
   $("thoughtText").textContent = a.thought || "…";
+  if (a.watching) {
+    $("thoughtSus").hidden = !a.suspectedBug; $("thoughtSus").textContent = a.suspectedBug ? "Suspects a bug: " + a.suspectedBug : "";
+    $("thought").style.opacity = 1;
+    $("inputs").innerHTML = `<span class="key ${a.suspectedBug ? "hold" : ""}">${a.suspectedBug ? "⚠ bug noted" : "👁 watching"}</span>`;
+    return;
+  }
+  $("thoughtSus").hidden = !a.suspectedBug; $("thoughtSus").textContent = a.suspectedBug ? "Suspects a bug: " + a.suspectedBug : "";
   $("thought").style.opacity = 1;
+  const nice = (k) => k.replace(/^Key|^Digit|^Arrow|Left$/g, (m) => (m === "Arrow" ? "" : m === "Left" ? "" : "")) || k;
+  $("inputs").innerHTML = [
+    ...a.hold.map((k) => `<span class="key hold">hold ${esc(nice(k))}</span>`),
+    ...a.tap.map((k) => `<span class="key">tap ${esc(nice(k))}</span>`),
+    a.click ? `<span class="key click">click</span>` : "",
+    `<span class="key">${a.ms} ms</span>`,
+  ].join("");
+  if (a.click) {
+    const st = $("feed").getBoundingClientRect(), stage = $("feed").parentElement.getBoundingClientRect();
+    const c = $("cursor");
+    c.style.left = (st.left - stage.left + a.click.x / (S.view?.width || 1280) * st.width) + "px";
+    c.style.top = (st.top - stage.top + a.click.y / (S.view?.height || 800) * st.height) + "px";
+    c.style.opacity = 1; setTimeout(() => { c.style.opacity = 0; }, 900);
+  }
 }
-
-// ---------- Banner ----------
 async function banner(eyebrow, title, sub, items, ms) {
-  $("bEyebrow").textContent = eyebrow;
-  $("bTitle").textContent = title;
-  $("bSub").textContent = sub || "";
+  $("bEyebrow").textContent = eyebrow; $("bTitle").textContent = title; $("bSub").textContent = sub || "";
   $("bList").innerHTML = (items || []).map((i) => `<li>${esc(i)}</li>`).join("");
   $("banner").classList.add("show");
-  await sleep(ms || 2000);
+  await sleep(ms || 1500);
   $("banner").classList.remove("show");
-  await sleep(350);
+}
+
+// ---------- Planted bugs ----------
+function renderPlanted(p) {
+  $("plantedPanel").hidden = !p;
+  if (!p) return;
+  const fixedIn = {};
+  for (const v of p.versions) if (!v.rejected) for (const id of v.fixed) if (!(id in fixedIn)) fixedIn[id] = v.version;
+  const fixedCount = Object.keys(fixedIn).length;
+  $("plantedScore").textContent = `${fixedCount} / ${p.bugs.length}`;
+  $("planted").innerHTML = p.bugs.map((b) => `
+    <div class="pb ${fixedIn[b.id] ? "fixed" : ""}">
+      <span class="box"></span>
+      <div><b>${esc(b.title)}</b><small>${esc(b.seen)}</small></div>
+      ${fixedIn[b.id] ? `<span class="when">fixed in v${fixedIn[b.id]}</span>` : `<span class="lock">open</span>`}
+    </div>`).join("");
 }
 
 // ---------- Chart ----------
-function drawChart(live) {
-  const rows = S.results.map((r) => ({ n: r.iteration, v: r.version, h: r.height, live: false }));
-  if (live) rows.push({ n: live.iteration, v: live.version, h: live.height, live: true });
+function drawChart() {
+  const rows = S.runs.slice(-12);
   if (!rows.length) return;
-  const max = Math.max(10, ...rows.map((r) => r.h));
-  $("chart").innerHTML = rows.slice(-12).map((r) =>
-    `<div class="bar${r.live ? " live" : ""}"><em>${r.h}</em><i style="height:${(r.h / max * 100).toFixed(1)}%"></i><small>#${r.n} v${r.v}</small></div>`
+  const max = Math.max(10, ...rows.map((r) => r.metric || 0));
+  $("chart").innerHTML = rows.map((r) =>
+    `<div class="bar"><em>${r.metric}${r.metricLabel === "m" ? "" : ""}</em><i style="height:${((r.metric || 0) / max * 100).toFixed(1)}%"></i><small>#${r.iteration}${r.version ? ` v${r.version}` : ""}</small></div>`
   ).join("");
 }
 
-// ---------- Offline bot ----------
-let botTarget = null;
-function botAction(st) {
-  const plats = st.platforms.filter((p) => p.active);
-  const dir = (p) => { const l = Math.hypot(p.dx, p.dz) || 1; return { x: p.dx / l, z: p.dz / l }; };
-  if (!st.grounded) {
-    const t = plats.find((p) => p.id === botTarget);
-    if (!t) return { thought: "Airborne, no target", move: { x: 0, z: 0 }, jump: false, hold: true, seconds: 0.15 };
-    const hd = Math.hypot(t.dx, t.dz);
-    return { thought: `Steering onto #${t.id}`, move: hd < 0.35 ? { x: 0, z: 0 } : dir(t), jump: false, hold: true, seconds: 0.12 };
-  }
-  let cands = plats.filter((p) => !p.standingOn && p.dy > 0.2 && p.dy < 2.2 && !p.crumbling);
-  if (!cands.length) cands = plats.filter((p) => !p.standingOn && p.dy > -1);
-  if (!cands.length) return { thought: "Nothing reachable in view", move: { x: 0, z: 0 }, jump: false, hold: false, seconds: 0.3 };
-  cands.sort((a, b) => (Math.hypot(a.dx, a.dz) - a.dy * 1.2 - (a.gem ? 0.6 : 0)) - (Math.hypot(b.dx, b.dz) - b.dy * 1.2 - (b.gem ? 0.6 : 0)));
-  const t = cands[0];
-  botTarget = t.id;
-  const hd = Math.hypot(t.dx, t.dz);
-  return { thought: `Jump to ${t.kind} #${t.id}: ${hd.toFixed(1)} m out, ${t.dy.toFixed(1)} m up`, move: dir(t), jump: true, hold: true, seconds: 0.22 };
-}
-
-async function argonAction(st, history, shot) {
-  const res = await fetch("/api/act", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ state: st, history: history.slice(-6), screenshot: shot }),
-  });
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-  return body;
-}
-
-// ---------- Recording ----------
-// Run 1 is the baseline, then every 5th run, so the clips show how Argon's play changes.
-const REC_EVERY = 5;
-const shouldRecord = (n) => n === 1 || n % REC_EVERY === 0;
-const rec = { canvas: document.createElement("canvas"), recorder: null, chunks: [], raf: 0, info: null };
-
-function startRecording(n, v) {
-  const doc = $("frame").contentDocument;
-  const src = doc && doc.getElementById("game");
-  if (!src || !window.MediaRecorder) { log("error", "Recording is not available in this browser"); return false; }
-  const c = rec.canvas;
-  c.width = 1280; c.height = 800;
-  rec.info = { n, v, src, sky: doc.getElementById("sky"), ctx: c.getContext("2d") };
-  const draw = () => { drawRecFrame(); rec.raf = requestAnimationFrame(draw); };
-  draw();
-  const mime = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find((t) => MediaRecorder.isTypeSupported(t));
-  rec.chunks = [];
-  rec.recorder = new MediaRecorder(c.captureStream(30), { mimeType: mime, videoBitsPerSecond: 5e6 });
-  rec.recorder.ondataavailable = (e) => { if (e.data.size) rec.chunks.push(e.data); };
-  rec.recorder.start(1000);
-  $("recPill").hidden = false;
-  log("sys", `Recording iteration ${n}`);
-  return true;
-}
-
-function drawRecFrame() {
-  const { src, sky, n, v, ctx } = rec.info;
-  const W = rec.canvas.width, H = rec.canvas.height;
-  const m = (sky && sky.style.background || "").match(/rgb\([^)]*\)/g) || ["rgb(126,182,230)", "rgb(250,222,200)"];
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, m[0]); g.addColorStop(1, m[1] || m[0]);
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  if (src.width && src.height) {
-    const s = Math.max(W / src.width, H / src.height), w = src.width * s, h = src.height * s;
-    try { ctx.drawImage(src, (W - w) / 2, (H - h) / 2, w, h); } catch (e) {}
-  }
-  ctx.fillStyle = "rgba(14,16,22,0.75)";
-  ctx.fillRect(24, 24, 420, 82);
-  ctx.fillStyle = "#e6e9f2"; ctx.font = "700 34px 'Chakra Petch', sans-serif";
-  ctx.fillText(`ITERATION ${n}`, 42, 64);
-  ctx.fillStyle = "#7cc4ff"; ctx.font = "500 17px 'IBM Plex Mono', monospace";
-  ctx.fillText(`Build v${v} · ${$("rHeight").textContent} · step ${$("rStep").textContent}`, 42, 92);
-  let t = $("thoughtText").textContent;
-  if (t) {
-    t = "Argon: " + (t.length > 95 ? t.slice(0, 94) + "…" : t);
-    ctx.font = "500 20px 'IBM Plex Sans', sans-serif";
-    const tw = Math.min(W - 48, ctx.measureText(t).width + 36);
-    ctx.fillStyle = "rgba(14,16,22,0.8)"; ctx.fillRect(24, H - 76, tw, 52);
-    ctx.fillStyle = "#e6e9f2"; ctx.fillText(t, 42, H - 42);
-  }
-}
-
-async function stopRecording(r) {
-  if (!rec.recorder) return null;
-  const mr = rec.recorder;
-  rec.recorder = null;
-  await sleep(600); // keep the fall in frame
-  await new Promise((res) => { mr.onstop = res; mr.stop(); });
-  cancelAnimationFrame(rec.raf);
-  $("recPill").hidden = true;
-  const blob = new Blob(rec.chunks, { type: "video/webm" });
-  try {
-    const res = await fetch(`/api/recording?iteration=${r.iteration}&version=${r.version}&height=${r.height}`, { method: "POST", headers: { "content-type": "video/webm" }, body: blob });
-    const j = await res.json();
-    log("sys", `Saved recordings/${j.file} (${(blob.size / 1e6).toFixed(1)} MB)`);
-    return j.file;
-  } catch (e) {
-    log("error", `Could not save the recording: ${e.message}`);
-    return null;
-  }
-}
-
 // ---------- Cards ----------
-function newCard(n, v) {
-  $("cardsEmpty")?.remove();
-  document.querySelectorAll(".card.active").forEach((c) => c.classList.remove("active"));
-  const el = document.createElement("div");
-  el.className = "card active";
-  el.innerHTML = `
-    <div class="top"><b>Iteration ${n}</b><span class="pill">Build v${v}</span><span class="status playing">Playing</span></div>
-    <div class="stats"></div>
-    <div class="fixes" hidden></div>`;
-  $("cards").prepend(el);
-  return el;
-}
-function setStatus(card, cls, text) { const s = card.querySelector(".status"); s.className = "status " + cls; s.textContent = text; }
-function renderStats(card, r) {
-  card.querySelector(".stats").innerHTML =
-    `<span>Height <b>${r.height} m</b></span><span>Gems <b>${r.gems}</b></span><span>Steps <b>${r.steps}</b></span>` +
-    `<span>Outcome <b>${esc(r.outcome)}</b></span><span>Errors <b>${r.errors.length}</b></span><span>Anomalies <b>${r.anomalies.length}</b></span>`;
-}
 function diffHtml(e) {
   const del = e.find.split("\n").map((l) => `<div class="del">- ${esc(l)}</div>`).join("");
   const add = e.replace.split("\n").map((l) => `<div class="add">+ ${esc(l)}</div>`).join("");
-  return `<details><summary>${esc(e.why || "Edit")}</summary><div class="diff">${del}${add}</div></details>`;
+  return `<details><summary>${esc(e.file)} · ${esc(e.why || "Edit")}</summary><div class="diff">${del}${add}</div></details>`;
 }
-function renderFix(card, fix) {
-  const f = card.querySelector(".fixes");
-  f.hidden = false;
-  if (fix.offline) { f.innerHTML = `<div class="note">The offline bot can't write fixes. Configure Argon to get a new build after each run.</div>`; return; }
-  if (fix.error) { f.innerHTML = `<div class="head">Argon's fixes</div><div class="note">Fix request failed: ${esc(fix.error)}</div>`; return; }
-  const bugs = (fix.bugs || []).map((b) => `<div class="bug"><span class="sev ${esc(b.severity || "low")}">${esc(b.severity || "low")}</span><span><b>${esc(b.title)}</b>${b.evidence ? ` · <span style="color:var(--muted)">${esc(b.evidence)}</span>` : ""}</span></div>`).join("");
-  const head = fix.noChange ? "Argon found nothing to change" : fix.rejected ? `Build v${fix.version} rejected` : `Argon's fixes → Build v${fix.version}`;
-  f.innerHTML = `<div class="head">${head}</div>
-    ${fix.summary ? `<p>${esc(fix.summary)}</p>` : ""}
-    ${bugs}
-    ${(fix.edits || []).map(diffHtml).join("")}
-    ${(fix.skipped || []).length ? `<div class="note">${fix.skipped.length} edit(s) skipped: ${esc(fix.skipped.map((s) => s.reason).join(", "))}</div>` : ""}
-    ${fix.rejected ? `<div class="note">Kept the previous build: ${esc(fix.rejectReason || "")}</div>` : ""}
-    ${!fix.noChange && !fix.rejected ? `<a href="/game?v=${fix.version}" target="_blank" rel="noopener">Play build v${fix.version} yourself</a>` : ""}`;
+function renderCard(c) {
+  $("cardsEmpty")?.remove();
+  let el = S.cards.get(c.n);
+  if (!el) {
+    el = document.createElement("div"); el.className = "card";
+    $("cards").prepend(el); S.cards.set(c.n, el);
+  }
+  document.querySelectorAll(".card.active").forEach((x) => x.classList.remove("active"));
+  if (c.status === "playing" || c.status === "fixing") el.classList.add("active");
+  const statusText = { playing: "Playing", fixing: S.session?.game.editable ? "Argon is fixing…" : "Writing report…", done: c.fix?.rejected ? "Build rejected" : c.fix?.noChange ? "No changes" : c.fix ? `→ v${c.fix.version}` : "Done", failed: "Failed", stopped: "Stopped" }[c.status] || c.status;
+  const r = c.result;
+  if (r) {
+    const i = S.runs.findIndex((x) => x.iteration === c.n);
+    const row = { iteration: c.n, version: c.version, ...r };
+    if (i >= 0) S.runs[i] = row; else S.runs.push(row);
+    drawChart();
+    $("rMetric").textContent = r.metricLabel === "m" ? `${r.metric} m` : `${r.metric} steps`;
+  }
+  const f = c.fix, rp = c.report;
+  el.innerHTML = `
+    <div class="top"><b>Iteration ${c.n}</b>${c.version ? `<span class="pill">Build v${c.version}</span>` : ""}
+      ${r?.recording ? `<a href="${esc(r.recording)}" target="_blank" rel="noopener">▶ Recording</a>` : ""}
+      <span class="status ${esc(c.status)}">${esc(statusText)}</span></div>
+    ${r ? `<div class="stats"><span>${r.metricLabel === "m" ? "Height" : "Steps"} <b>${r.metric}${r.metricLabel === "m" ? " m" : ""}</b></span><span>Outcome <b>${esc(r.outcome)}</b></span><span>Page errors <b>${r.errors.length}</b></span><span>Suspected <b>${r.suspected.length}</b></span></div>` : ""}
+    ${r && r.suspected.length ? `<div class="fixes"><div class="head">What Argon noticed while playing</div>${r.suspected.map((s) => `<div class="bug"><span class="sev medium">step ${s.step}</span><span>${esc(s.note)}</span></div>`).join("")}</div>` : ""}
+    ${f ? renderFix(f) : rp ? renderReport(rp) : ""}`;
 }
-
-// ---------- Iteration ----------
-async function runIteration(n, total, lastFix) {
-  const items = lastFix && lastFix.edits && !lastFix.rejected && !lastFix.noChange
-    ? lastFix.edits.map((e) => e.why || "Edit").slice(0, 5) : [];
-  const sub = items.length ? `Running build v${S.version}, with ${items.length} change${items.length > 1 ? "s" : ""} by Argon after iteration ${n - 1}:` : `Running build v${S.version}`;
-  const loading = loadBuild(S.version);
-  await banner(`Playtest ${n} of ${total}`, `Iteration ${n}`, sub, items, items.length ? 2800 : 1800);
-
-  let game;
-  try { game = await loading; }
-  catch (e) {
-    log("error", `${e.message}. Rolling back.`);
-    const rb = await (await fetch("/api/rollback", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ version: S.version, reason: e.message }) })).json();
-    S.version = rb.version;
-    await refreshVersions();
-    game = await loadBuild(S.version);
-  }
-
-  const brain = $("brain").value;
-  const who = brain === "argon" ? "Argon" : "Offline bot";
-  const maxSteps = Math.max(5, Number($("maxSteps").value) || 40);
-  const card = newCard(n, S.version);
-  $("iterLabel").textContent = `Iteration ${n}`;
-  log("sys", `Iteration ${n} started on build v${S.version} with ${who}`);
-
-  let st = game.reset();
-  botTarget = null;
-  const recording = shouldRecord(n) && startRecording(n, S.version);
-  const history = [], allEvents = [];
-  const r = { iteration: n, version: S.version, height: 0, gems: 0, steps: 0, jumps: 0, outcome: "ran out of steps", errors: [], anomalies: [], death: null };
-  let bestAt = 0;
-
-  for (let i = 1; i <= maxSteps && !S.stop; i++) {
-    while (S.paused && !S.stop) await sleep(150);
-    $("iterSub").textContent = `Build v${S.version} · step ${i}/${maxSteps} · ${who}`;
-
-    let action;
-    if (brain === "argon") {
-      try {
-        const shot = $("shots").checked ? game.screenshot(384) : null;
-        action = await argonAction(st, history, shot);
-      } catch (e) {
-        log("error", `Argon action failed (${e.message}); the bot took this step`);
-        action = botAction(st);
-      }
-    } else action = botAction(st);
-    showAction(action, who);
-    if (brain === "argon" || action.jump) log("argon", `${who}: ${action.thought}`);
-
-    const before = { y: st.player.y, grounded: st.grounded };
-    const out = await game.step({ x: action.move.x, z: action.move.z, jump: action.jump, hold: action.hold }, action.seconds, Number($("speed").value));
-    st = out.state;
-    for (const ev of out.events) {
-      allEvents.push(ev);
-      if (ev.type === "jump") r.jumps++;
-      if (ev.type === "land") log("land", `Landed on ${ev.kind} #${ev.platform} at ${ev.y} m`);
-      if (ev.type === "gem") log("gem", `Gem collected (${ev.total})`);
-      if (ev.type === "error") { r.errors.push(ev); log("error", `Game error: ${ev.message}`); }
-      if (ev.type === "anomaly") { r.anomalies.push(ev); log("error", `Anomaly: ${ev.kind}`); }
-      if (ev.type === "death") { r.death = ev; log("death", `Fell at ${ev.height} m (last stood on ${ev.lastGround})`); }
-    }
-    r.steps = i; r.height = st.height; r.gems = st.gems;
-    if (r.height > bestAt) bestAt = r.height;
-    history.push({ step: i, thought: action.thought, move: action.move, jump: action.jump, seconds: action.seconds, before, after: { y: st.player.y, grounded: st.grounded, groundKind: st.groundKind }, events: out.events.map((e) => e.type) });
-    setReadouts({ height: r.height, gems: r.gems, step: i, max: maxSteps, jumps: r.jumps, issues: r.errors.length + r.anomalies.length });
-    drawChart(r);
-
-    if (st.status !== "play") { r.outcome = `fell from ${r.death?.lastGround || "a platform"}`; break; }
-    const stalled = history.length >= 20 && history.slice(-20).every((h) => Math.floor(h.after.y) <= Math.floor(history[history.length - 20].before.y));
-    if (stalled) { r.outcome = "stuck for 20 steps"; log("error", "No progress for 20 steps: flagging as stuck"); break; }
-  }
-  if (S.stop) r.outcome = "stopped";
-
-  if (recording) {
-    const file = await stopRecording(r);
-    if (file) { r.recording = file; card.querySelector(".top").insertAdjacentHTML("beforeend", `<a href="/recordings/${encodeURIComponent(file)}" target="_blank" rel="noopener">▶ Recording</a>`); }
-  }
-  renderStats(card, r);
-  S.results.push(r);
-  fetch("/api/report", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ iteration: n, version: r.version, height: r.height, gems: r.gems, steps: r.steps, outcome: r.outcome, errors: r.errors.length, recording: r.recording || null }) }).catch(() => {});
-  drawChart();
-  $("thought").style.opacity = 0;
-  if (S.stop) { setStatus(card, "failed", "Stopped"); return null; }
-
-  // Argon reviews the run and patches the build
-  if (brain !== "argon" || !S.argon) { renderFix(card, { offline: true }); setStatus(card, "done", "Done"); return null; }
-  setStatus(card, "fixing", "Argon is fixing…");
-  $("iterSub").textContent = `Argon is reviewing iteration ${n} and writing fixes`;
-  log("argon", "Argon is reviewing the run and writing fixes…");
-  await banner("Between iterations", "Argon is fixing", `Reviewing ${allEvents.length} events from iteration ${n}`, [], 1200);
-  const telemetry = { result: r, steps: history, events: allEvents.slice(-300), physics: game.physics };
-  let fix;
-  try {
-    const res = await fetch("/api/fix", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ version: S.version, iteration: n, telemetry }) });
-    fix = await res.json();
-    if (!res.ok) throw new Error(fix.error || `HTTP ${res.status}`);
-  } catch (e) {
-    fix = { error: e.message };
-  }
-  renderFix(card, fix);
-  if (fix.error) { setStatus(card, "failed", "Fix failed"); log("error", `Fix failed: ${fix.error}`); return null; }
-  if (fix.rejected) { setStatus(card, "failed", "Build rejected"); log("error", `Build v${fix.version} rejected: ${fix.rejectReason}`); }
-  else if (fix.noChange) { setStatus(card, "done", "No changes"); log("argon", "Argon found nothing to fix"); }
-  else { setStatus(card, "done", `→ v${fix.version}`); log("argon", `Build v${fix.version}: ${fix.summary}`); }
-  await refreshVersions();
-  return fix;
+function bugsHtml(bugs) {
+  return (bugs || []).map((b) => `<div class="bug"><span class="sev ${esc(b.severity || "low")}">${esc(b.severity || "low")}</span><span><b>${esc(b.title)}</b>${b.evidence ? ` · <span style="color:var(--muted)">${esc(b.evidence)}</span>` : ""}${b.steps ? `<br><span style="color:var(--muted)">Repro: ${esc(b.steps)}</span>` : ""}</span></div>`).join("");
+}
+function renderFix(f) {
+  if (f.error) return `<div class="fixes"><div class="head">Argon's fixes</div><div class="note">Failed: ${esc(f.error)}</div></div>`;
+  const head = f.noChange ? "Argon made no changes" : f.rejected ? `Build v${f.version} rejected` : `Argon's fixes → Build v${f.version}`;
+  const g = S.session?.game.id;
+  return `<div class="fixes"><div class="head">${head}</div>
+    ${f.watchedRecording ? `<div class="note ok">Argon watched the recording of this run</div>` : ""}
+    ${f.summary ? `<p>${esc(f.summary)}</p>` : ""}
+    ${bugsHtml(f.bugs)}
+    ${(f.edits || []).map(diffHtml).join("")}
+    ${(f.skipped || []).length ? `<div class="note">${f.skipped.length} edit(s) rejected: ${esc(f.skipped.map((s) => s.reason).join("; "))}</div>` : ""}
+    ${f.rejected ? `<div class="note">Kept the previous build: ${esc(f.rejectReason || "")}</div>` : ""}
+    ${!f.noChange && !f.rejected && g ? `<a href="/play/${g}/v${f.version}/index.html" target="_blank" rel="noopener">Play build v${f.version} yourself</a>` : ""}</div>`;
+}
+function renderReport(rp) {
+  return `<div class="fixes"><div class="head">Argon's bug report</div>
+    ${rp.watchedRecording ? `<div class="note ok">Argon watched the recording of this run</div>` : ""}
+    ${rp.summary ? `<p>${esc(rp.summary)}</p>` : ""}${bugsHtml(rp.bugs)}${rp.bugs.length ? "" : `<p class="empty">No defects found this run.</p>`}</div>`;
 }
 
-async function runAll() {
-  S.running = true; S.stop = false; S.paused = false;
-  $("startBtn").textContent = "Stop"; $("pauseBtn").disabled = false; $("resetBtn").disabled = true;
-  const total = Math.max(1, Number($("iters").value) || 5);
-  const startAt = S.results.length ? S.results[S.results.length - 1].iteration : 0;
-  let lastFix = null, failures = 0;
-  for (let k = 1; (k <= total || $("endless").checked) && !S.stop; k++) {
-    const label = $("endless").checked ? "∞" : startAt + total;
-    try { lastFix = await runIteration(startAt + k, label, lastFix); failures = 0; }
-    catch (e) {
-      log("error", `Iteration failed: ${e.message}`);
-      if (++failures >= 3 || !$("endless").checked) break;
-      await sleep(5000);
-    }
-  }
-  if (!S.stop && S.results.length) {
-    const first = S.results.find((r) => r.iteration === startAt + 1) || S.results[0], last = S.results[S.results.length - 1];
-    await banner("Playtest complete", `Build v${S.version}`, `Height went from ${first.height} m in iteration ${first.iteration} to ${last.height} m in iteration ${last.iteration}.`, [], 2600);
-  }
-  S.running = false; S.paused = false;
-  $("startBtn").textContent = "Start playtest"; $("pauseBtn").disabled = true; $("pauseBtn").textContent = "Pause"; $("resetBtn").disabled = false;
-  $("iterLabel").textContent = "Ready"; $("iterSub").textContent = `Latest build v${S.version}`;
+// ---------- Controls ----------
+async function start() {
+  const body = { ...sessionBody(), fresh: $("fresh").checked };
+  if (body.target.kind === "url" && !body.target.url) { log("error", "Enter a URL first"); return; }
+  const res = await fetch("/api/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const j = await res.json();
+  if (!res.ok) log("error", j.error || `HTTP ${res.status}`);
 }
+$("startBtn").addEventListener("click", () => { if (S.running) fetch("/api/stop", { method: "POST" }); else start(); });
 
-$("startBtn").addEventListener("click", () => {
-  if (S.running) { S.stop = true; S.paused = false; log("sys", "Stopping after the current step"); }
-  else runAll();
-});
-$("pauseBtn").addEventListener("click", () => {
-  S.paused = !S.paused;
-  $("pauseBtn").textContent = S.paused ? "Resume" : "Pause";
-  log("sys", S.paused ? "Paused" : "Resumed");
-});
-let resetArmed = false;
-$("resetBtn").addEventListener("click", async () => {
-  if (!resetArmed) {
-    resetArmed = true; $("resetBtn").textContent = "Click again to reset";
-    setTimeout(() => { resetArmed = false; $("resetBtn").textContent = "Reset builds"; }, 3000);
+function sessionBody() {
+  const kind = $("kind").value;
+  return {
+    target: kind === "url" ? { kind: "url", url: $("gameUrl").value.trim() } : { kind: "local", path: $("localGame").value },
+    notes: $("notes").value, iterations: Number($("iters").value), endless: $("endless").checked, maxSteps: Number($("maxSteps").value),
+    speed: Number($("speed").value), recordEvery: Number($("recEvery").value), polish: $("polish").checked,
+    player: $("player").value, watchEvery: Number($("watchEvery").value), idleSpeed: Number($("idleSpeed").value),
+  };
+}
+let restartArmed = 0;
+$("restartBtn").addEventListener("click", async () => {
+  const b = $("restartBtn");
+  if (!restartArmed) {
+    restartArmed = setTimeout(() => { restartArmed = 0; b.classList.remove("armed"); b.textContent = "Restart demo"; }, 3500);
+    b.classList.add("armed"); b.textContent = "Click again to wipe & restart";
     return;
   }
-  resetArmed = false; $("resetBtn").textContent = "Reset builds";
-  await fetch("/api/reset-versions", { method: "POST" });
-  S.results = [];
-  $("cards").innerHTML = `<div class="empty" id="cardsEmpty">Builds reset to the original game.</div>`;
-  $("chart").innerHTML = `<div class="empty">Each run's height shows up here, so you can see whether Argon's fixes help.</div>`;
-  await refreshVersions();
-  await loadBuild(S.version).catch(() => {});
-  log("sys", "All builds deleted; back to v1");
+  clearTimeout(restartArmed); restartArmed = 0; b.classList.remove("armed"); b.textContent = "Restarting…"; b.disabled = true;
+  if ($("kind").value === "local") { $("endless").checked = true; $("recEvery").value = 1; }
+  const res = await fetch("/api/restart-demo", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(sessionBody()) });
+  const j = await res.json();
+  if (!res.ok) log("error", j.error || `HTTP ${res.status}`);
+  setTimeout(() => { b.disabled = false; b.textContent = "Restart demo"; }, 3000);
 });
+$("pauseBtn").addEventListener("click", () => fetch("/api/pause", { method: "POST" }));
+$("endRunBtn").addEventListener("click", () => { $("endRunBtn").disabled = true; setTimeout(() => { $("endRunBtn").disabled = false; }, 4000); fetch("/api/endrun", { method: "POST" }); });
 
 boot();
 </script>

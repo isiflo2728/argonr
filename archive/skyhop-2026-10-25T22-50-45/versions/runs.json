@@ -1,0 +1,16 @@
+[
+  {
+    "iteration": 1,
+    "version": 1,
+    "metric": 4,
+    "metricLabel": "steps",
+    "steps": 4,
+    "outcome": "stopped",
+    "errors": [
+      "stall: Protocol error (Input.dispatchKeyEvent): Session closed. Most likely the page has been closed."
+    ],
+    "loadErrors": 0,
+    "suspected": [],
+    "recording": "/recordings/skyhop/run-001-v1.mp4"
+  }
+]

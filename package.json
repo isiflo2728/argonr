@@ -3,5 +3,8 @@
   "private": true,
   "scripts": {
     "start": "node server.js"
+  },
+  "dependencies": {
+    "puppeteer-core": "25.12.0"
   }
 }

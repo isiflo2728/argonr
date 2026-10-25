@@ -1,0 +1,79 @@
+[
+  {
+    "version": 1,
+    "parent": null,
+    "iteration": 0,
+    "summary": "Original build",
+    "bugs": [],
+    "edits": [],
+    "createdAt": "2026-10-25T22:30:50.658Z"
+  },
+  {
+    "version": 2,
+    "parent": 1,
+    "iteration": 1,
+    "summary": "Fix the gem collection crash that freezes the game, along with broken spring pads, crumbling platforms staying solid, the HUD height cap at 10m, and backwards player facing.",
+    "bugs": [
+      {
+        "title": "Collecting a gem throws a TypeError and freezes the game loop",
+        "evidence": "At 0:16 in the video, touching the gem on platform 54 immediately freezes the game. In updatePlayer(), pl.gem is set to null before logEvent reads pl.gem.position.y, throwing 'Cannot read properties of null (reading position)'.",
+        "severity": "high"
+      },
+      {
+        "title": "Spring pads barely bounce the player instead of launching them",
+        "evidence": "In land(), landing on a spring platform sets p.vy = JUMP * 0.4 (5.0) instead of SPRING (22), making the 4.5-6m vertical gap above a spring impossible to clear.",
+        "severity": "high"
+      },
+      {
+        "title": "Crumbling platforms remain solid in the air after falling",
+        "evidence": "In updatePlatforms(), when a crumble platform exceeds 0.55s and starts falling (pl.falling = true), pl.active is never set to false, so collision detection keeps the player standing in mid-air at the original height.",
+        "severity": "high"
+      },
+      {
+        "title": "HUD height counter stops updating at 10 meters",
+        "evidence": "In updateHud(), the condition 'if (h !== shownH && h < 10)' prevents hHeight from updating once the player reaches 10m or higher.",
+        "severity": "medium"
+      },
+      {
+        "title": "Player character faces backwards when moving",
+        "evidence": "At 0:10 and 0:16 in the video, the player's eyes face opposite to the movement direction because updateVisuals computes Math.atan2(-p.vx, -p.vz) even though the eyes are mounted on the +Z face (z = 0.41).",
+        "severity": "medium"
+      }
+    ],
+    "edits": [
+      {
+        "file": "index.html",
+        "find": "        if (Math.hypot(p.x - pl.x, p.y + 0.4 - gy, p.z - pl.z) < 0.95) {\n          pl.g.remove(pl.gem); pl.gem = null; gems++;\n          logEvent(\"gem\", { platform: pl.id, total: gems, height: pl.gem.position.y });\n          sfx.gem(); burst(pl.x, gy - 0.1, pl.z, 10, 0.9);\n        }",
+        "replace": "        if (Math.hypot(p.x - pl.x, p.y + 0.4 - gy, p.z - pl.z) < 0.95) {\n          const gemH = pl.gem.position.y;\n          pl.g.remove(pl.gem); pl.gem = null; gems++;\n          logEvent(\"gem\", { platform: pl.id, total: gems, height: gemH });\n          sfx.gem(); burst(pl.x, gy - 0.1, pl.z, 10, 0.9);\n        }",
+        "why": "Fix: read pl.gem.position.y before setting pl.gem = null so collecting a gem does not throw a TypeError and halt the game loop."
+      },
+      {
+        "file": "index.html",
+        "find": "      if (h !== shownH && h < 10) { shownH = h; hHeight.textContent = h; }",
+        "replace": "      if (h !== shownH) { shownH = h; hHeight.textContent = h; }",
+        "why": "Fix: update the HUD height display at all altitudes instead of capping updates below 10m."
+      },
+      {
+        "file": "index.html",
+        "find": "            if (pl.crumbleT > 0.55) { pl.falling = true; sfx.crack(); burst(pl.x, pl.y, pl.z, 10, 0.8); }",
+        "replace": "            if (pl.crumbleT > 0.55) { pl.falling = true; pl.active = false; sfx.crack(); burst(pl.x, pl.y, pl.z, 10, 0.8); }",
+        "why": "Fix: mark crumbling platforms inactive when they fall so they no longer support the player in mid-air."
+      },
+      {
+        "file": "index.html",
+        "find": "      if (pl.type === \"spring\") {\n        p.vy = JUMP * 0.4; p.springing = true; p.sq = 0.55;",
+        "replace": "      if (pl.type === \"spring\") {\n        p.vy = SPRING; p.springing = true; p.sq = 0.55;",
+        "why": "Fix: launch the player with SPRING velocity when landing on a spring platform."
+      },
+      {
+        "file": "index.html",
+        "find": "        const target = Math.atan2(-p.vx, -p.vz);",
+        "replace": "        const target = Math.atan2(p.vx, p.vz);",
+        "why": "Fix: rotate the player's +Z face toward the velocity vector so the character faces the direction of movement."
+      }
+    ],
+    "skipped": [],
+    "watchedRecording": true,
+    "createdAt": "2026-10-25T22:32:16.352Z"
+  }
+]

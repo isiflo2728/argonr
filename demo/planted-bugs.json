@@ -1,0 +1,36 @@
+{
+  "skyhop": [
+    {
+      "id": "gem-crash",
+      "title": "Collecting a gem throws an error and freezes the game",
+      "seen": "Game freezes the moment a gem is picked up; TypeError in the console",
+      "signature": "height: pl.gem.position.y",
+      "fixedIf": "pl\\.gem\\?\\.position|logEvent\\(\"gem\"[^\\n]*pl\\.gem\\.position\\.y[\\s\\S]{0,200}?pl\\.gem = null"
+    },
+    {
+      "id": "weak-spring",
+      "title": "Spring pads barely bounce",
+      "seen": "Landing on a pink spring gives a tiny hop instead of a big launch",
+      "signature": "p.vy = JUMP * 0.4"
+    },
+    {
+      "id": "ghost-crumble",
+      "title": "Crumbled islands stay solid after they fall",
+      "seen": "The orange island falls away but the player keeps standing on thin air",
+      "signature": "pl.falling = true",
+      "fixedIf": "crumbleT > [\\d.]+\\) \\{[^\\n]*pl\\.active = false"
+    },
+    {
+      "id": "moonwalk",
+      "title": "Character faces backwards while running",
+      "seen": "The cube's face points away from the direction it moves",
+      "signature": "Math.atan2(-p.vx, -p.vz)"
+    },
+    {
+      "id": "stuck-height",
+      "title": "Height counter stops updating at 9 m",
+      "seen": "The HUD shows 9 m while the player is clearly higher",
+      "signature": "h !== shownH && h < 10"
+    }
+  ]
+}

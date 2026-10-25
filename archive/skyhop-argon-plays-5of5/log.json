@@ -1,0 +1,115 @@
+[
+  {
+    "version": 1,
+    "parent": null,
+    "iteration": 0,
+    "summary": "Original build",
+    "bugs": [],
+    "edits": [],
+    "createdAt": "2026-10-25T22:05:31.917Z"
+  },
+  {
+    "version": 2,
+    "parent": 1,
+    "iteration": 1,
+    "summary": "Fixed three bugs: HUD height display freezing at 10m+, spring pads launching weakly instead of using SPRING velocity, and crumbling platforms remaining solid after falling.",
+    "bugs": [
+      {
+        "title": "Not a bug: missed the first jump and fell at 0 m",
+        "evidence": "0:00-0:03 jumped right off the starting platform and missed platform 43, falling into the void.",
+        "severity": "low"
+      },
+      {
+        "title": "HUD height counter stops updating at 10 meters and above",
+        "evidence": "In updateHud(), `if (h !== shownH && h < 10)` prevents #hHeight from updating once height reaches 10.",
+        "severity": "high"
+      },
+      {
+        "title": "Spring platforms barely bounce the player instead of launching them",
+        "evidence": "In land(), `if (pl.type === \"spring\") { p.vy = JUMP * 0.4; ... }` sets vy to 5 (max height ~0.39m) instead of `SPRING` (22), making the 4.5-6m gap after a spring impossible.",
+        "severity": "high"
+      },
+      {
+        "title": "Crumbling platforms stay solid and active at their original height after falling",
+        "evidence": "In updatePlatforms(), when `pl.crumbleT > 0.55`, `pl.falling = true` moves `pl.g.position.y = pl.fallY` downward, but `pl.active` stays `true` and `pl.y` stays unchanged, so the player keeps standing on thin air.",
+        "severity": "high"
+      }
+    ],
+    "edits": [
+      {
+        "file": "index.html",
+        "find": "      if (h !== shownH && h < 10) { shownH = h; hHeight.textContent = h; }",
+        "replace": "      if (h !== shownH) { shownH = h; hHeight.textContent = h; }",
+        "why": "Fix: allow HUD height counter to update at 10m and above."
+      },
+      {
+        "file": "index.html",
+        "find": "            if (pl.crumbleT > 0.55) { pl.falling = true; sfx.crack(); burst(pl.x, pl.y, pl.z, 10, 0.8); }",
+        "replace": "            if (pl.crumbleT > 0.55) { pl.falling = true; pl.active = false; sfx.crack(); burst(pl.x, pl.y, pl.z, 10, 0.8); }",
+        "why": "Fix: deactivate crumbling platform when it breaks and starts falling so it no longer supports the player in mid-air."
+      },
+      {
+        "file": "index.html",
+        "find": "      if (pl.type === \"spring\") {\n        p.vy = JUMP * 0.4; p.springing = true; p.sq = 0.55;",
+        "replace": "      if (pl.type === \"spring\") {\n        p.vy = SPRING; p.springing = true; p.sq = 0.55;",
+        "why": "Fix: use SPRING velocity when landing on a spring platform instead of JUMP * 0.4."
+      }
+    ],
+    "skipped": [],
+    "watchedRecording": true,
+    "createdAt": "2026-10-25T22:06:32.650Z"
+  },
+  {
+    "version": 3,
+    "parent": 2,
+    "iteration": 2,
+    "summary": "Fixed the player character facing backward opposite to its movement direction.",
+    "bugs": [
+      {
+        "title": "Player character faces backward when moving",
+        "evidence": "The player mesh has its eyes and cheeks on the local +Z face (z = 0.41) and leans toward +Z when running, but updateVisuals computes target yaw as Math.atan2(-p.vx, -p.vz), rotating local +Z toward (-vx, -vz) opposite to movement.",
+        "severity": "medium"
+      },
+      {
+        "title": "Not a bug: fell off the first jump in playtest",
+        "evidence": "In step 2-4 the jump was released after 600ms while jumping toward platform 47 and missed the landing.",
+        "severity": "low"
+      }
+    ],
+    "edits": [
+      {
+        "file": "index.html",
+        "find": "const target = Math.atan2(-p.vx, -p.vz);",
+        "replace": "const target = Math.atan2(p.vx, p.vz);",
+        "why": "Fix: rotate the player's +Z front face toward the velocity vector instead of opposite to it."
+      }
+    ],
+    "skipped": [],
+    "watchedRecording": false,
+    "createdAt": "2026-10-25T22:08:07.079Z"
+  },
+  {
+    "version": 4,
+    "parent": 3,
+    "iteration": 4,
+    "summary": "Fixed an uncaught TypeError when collecting a gem that crashed and froze the game loop before updating the HUD.",
+    "bugs": [
+      {
+        "title": "Collecting a gem throws TypeError reading 'position' of null and freezes the game loop",
+        "evidence": "In updatePlayer, pl.gem is set to null immediately before logEvent reads pl.gem.position.y, throwing 'Cannot read properties of null (reading position)' at step 9 and halting requestAnimationFrame.",
+        "severity": "high"
+      }
+    ],
+    "edits": [
+      {
+        "file": "index.html",
+        "find": "          pl.g.remove(pl.gem); pl.gem = null; gems++;\n          logEvent(\"gem\", { platform: pl.id, total: gems, height: pl.gem.position.y });",
+        "replace": "          pl.g.remove(pl.gem); gems++;\n          logEvent(\"gem\", { platform: pl.id, total: gems, height: pl.gem.position.y });\n          pl.gem = null;",
+        "why": "Fix: clear pl.gem after logging its position so collecting a gem does not throw a null dereference error and freeze the game."
+      }
+    ],
+    "skipped": [],
+    "watchedRecording": false,
+    "createdAt": "2026-10-25T22:10:04.856Z"
+  }
+]

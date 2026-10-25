@@ -789,11 +789,14 @@
     }
 
     function snapshotState() {
+      const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
       const near = platforms
         .filter((pl) => pl.y > p.y - 6 && pl.y < p.y + 9)
         .map((pl) => ({
           id: pl.id, kind: pl.type, active: pl.active, crumbling: pl.crumbleT >= 0,
           dx: +(pl.x - p.x).toFixed(2), dy: +(pl.y - p.y).toFixed(2), dz: +(pl.z - p.z).toFixed(2),
+          // Camera-relative: W/Up moves toward +ahead, D/Right toward +right
+          ahead: +((pl.x - p.x) * fx + (pl.z - p.z) * fz).toFixed(2), right: +((pl.x - p.x) * rx + (pl.z - p.z) * rz).toFixed(2),
           radius: +pl.r.toFixed(2), gem: !!pl.gem, standingOn: p.ground === pl,
         }))
         .sort((a, b) => a.dy - b.dy);
@@ -802,8 +805,11 @@
         player: { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), vx: +p.vx.toFixed(2), vy: +p.vy.toFixed(2), vz: +p.vz.toFixed(2) },
         grounded: !!p.ground, groundKind: p.ground ? p.ground.type : null,
         height: Math.floor(maxY), gems, platforms: near,
+        controls: "W/S or Up/Down move along ahead, A/D or Left/Right along right, Space jumps (hold for higher), Space or Enter starts and restarts",
       };
     }
+    // Generic playtest hook: any lab can read the game state without the harness
+    window.playtest = { getState: snapshotState, events: () => events.slice(-60) };
 
     if (HARNESS) {
       titleScreen.hidden = true;

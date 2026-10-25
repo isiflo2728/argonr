@@ -442,7 +442,7 @@
     let shownH = -1, shownZone = "";
     function updateHud(zone) {
       const h = Math.floor(maxY);
-      if (h !== shownH) { shownH = h; hHeight.textContent = h; }
+      if (h !== shownH && h < 10) { shownH = h; hHeight.textContent = h; }
       hGems.textContent = gems;
       hBest.textContent = best;
       if (zone && zone !== shownZone) { shownZone = zone; hZone.textContent = zone; }
@@ -597,13 +597,13 @@
         }
         if (pl.crumbleT >= 0) {
           pl.crumbleT += dt;
-          if (pl.active) {
+          if (!pl.falling) {
             pl.g.position.x = pl.x + rand(-0.06, 0.06);
             pl.g.position.z = pl.z + rand(-0.06, 0.06);
-            if (pl.crumbleT > 0.55) { pl.active = false; sfx.crack(); burst(pl.x, pl.y, pl.z, 10, 0.8); }
+            if (pl.crumbleT > 0.55) { pl.falling = true; sfx.crack(); burst(pl.x, pl.y, pl.z, 10, 0.8); }
           } else {
-            pl.vy -= 30 * dt; pl.y += pl.vy * dt;
-            pl.g.position.y = pl.y;
+            pl.vy -= 30 * dt; pl.fallY = (pl.fallY ?? pl.y) + pl.vy * dt;
+            pl.g.position.y = pl.fallY;
             pl.g.rotation.z += dt * 0.8;
           }
         }
@@ -625,7 +625,7 @@
       lastGroundType = pl.type;
       logEvent("land", { platform: pl.id, kind: pl.type, y: +pl.y.toFixed(2) });
       if (pl.type === "spring") {
-        p.vy = SPRING; p.springing = true; p.sq = 0.55;
+        p.vy = JUMP * 0.4; p.springing = true; p.sq = 0.55;
         if (pl.pad) pl.pad.position.y = 0.05;
         sfx.spring(); burst(pl.x, pl.y, pl.z, 12, 1.2);
         maxY = Math.max(maxY, pl.y);
@@ -695,7 +695,7 @@
         const gy = pl.y + pl.gem.position.y;
         if (Math.hypot(p.x - pl.x, p.y + 0.4 - gy, p.z - pl.z) < 0.95) {
           pl.g.remove(pl.gem); pl.gem = null; gems++;
-          logEvent("gem", { platform: pl.id, total: gems });
+          logEvent("gem", { platform: pl.id, total: gems, height: pl.gem.position.y });
           sfx.gem(); burst(pl.x, gy - 0.1, pl.z, 10, 0.9);
         }
       }
@@ -707,7 +707,7 @@
       player.position.set(p.x, p.y, p.z);
       const sp = Math.hypot(p.vx, p.vz);
       if (sp > 0.6) {
-        const target = Math.atan2(p.vx, p.vz);
+        const target = Math.atan2(-p.vx, -p.vz);
         let d = target - p.face;
         d = Math.atan2(Math.sin(d), Math.cos(d));
         p.face += d * Math.min(1, dt * 12);
@@ -789,11 +789,14 @@
     }
 
     function snapshotState() {
+      const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
       const near = platforms
         .filter((pl) => pl.y > p.y - 6 && pl.y < p.y + 9)
         .map((pl) => ({
           id: pl.id, kind: pl.type, active: pl.active, crumbling: pl.crumbleT >= 0,
           dx: +(pl.x - p.x).toFixed(2), dy: +(pl.y - p.y).toFixed(2), dz: +(pl.z - p.z).toFixed(2),
+          // Camera-relative: W/Up moves toward +ahead, D/Right toward +right
+          ahead: +((pl.x - p.x) * fx + (pl.z - p.z) * fz).toFixed(2), right: +((pl.x - p.x) * rx + (pl.z - p.z) * rz).toFixed(2),
           radius: +pl.r.toFixed(2), gem: !!pl.gem, standingOn: p.ground === pl,
         }))
         .sort((a, b) => a.dy - b.dy);
@@ -802,8 +805,11 @@
         player: { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), vx: +p.vx.toFixed(2), vy: +p.vy.toFixed(2), vz: +p.vz.toFixed(2) },
         grounded: !!p.ground, groundKind: p.ground ? p.ground.type : null,
         height: Math.floor(maxY), gems, platforms: near,
+        controls: "W/S or Up/Down move along ahead, A/D or Left/Right along right, Space jumps (hold for higher), Space or Enter starts and restarts",
       };
     }
+    // Generic playtest hook: any lab can read the game state without the harness
+    window.playtest = { getState: snapshotState, events: () => events.slice(-60) };
 
     if (HARNESS) {
       titleScreen.hidden = true;

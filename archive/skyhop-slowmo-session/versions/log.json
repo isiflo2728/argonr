@@ -1,0 +1,97 @@
+[
+  {
+    "version": 1,
+    "parent": null,
+    "iteration": 0,
+    "summary": "Original build",
+    "bugs": [],
+    "edits": [],
+    "createdAt": "2026-10-25T22:25:10.479Z"
+  },
+  {
+    "version": 2,
+    "parent": 1,
+    "iteration": 1,
+    "summary": "Fix crash when collecting a gem, broken HUD height counter above 9m, weak spring bounce, and crumbling platforms staying solid after falling.",
+    "bugs": [
+      {
+        "title": "Collecting a gem crashes the game loop with 'Cannot read properties of null (reading position)'",
+        "evidence": "At 0:16 (step 4), collecting a gem sets pl.gem = null and then immediately accesses pl.gem.position.y inside logEvent, throwing a TypeError and freezing the game loop.",
+        "severity": "high"
+      },
+      {
+        "title": "HUD height stops updating at 10m or higher",
+        "evidence": "In updateHud, the condition `if (h !== shownH && h < 10)` prevents hHeight from updating once maxY reaches 10.",
+        "severity": "medium"
+      },
+      {
+        "title": "Spring platforms barely bounce the player instead of launching them",
+        "evidence": "In land(), spring platforms set `p.vy = JUMP * 0.4` (5.0) instead of `SPRING` (22), making it impossible to reach the next platform generated 4.5 to 6 units higher.",
+        "severity": "high"
+      },
+      {
+        "title": "Crumbling platforms stay solid after falling",
+        "evidence": "In updatePlatforms(), when `pl.crumbleT > 0.55`, `pl.falling = true` is set, but `pl.active` is never set to `false`, so the player continues standing on invisible air where the platform was.",
+        "severity": "high"
+      }
+    ],
+    "edits": [
+      {
+        "file": "index.html",
+        "find": "          pl.g.remove(pl.gem); pl.gem = null; gems++;\n          logEvent(\"gem\", { platform: pl.id, total: gems, height: pl.gem.position.y });",
+        "replace": "          pl.g.remove(pl.gem); pl.gem = null; gems++;\n          logEvent(\"gem\", { platform: pl.id, total: gems, height: +gy.toFixed(2) });",
+        "why": "Fix: use computed gem height gy instead of reading position from null pl.gem."
+      },
+      {
+        "file": "index.html",
+        "find": "      if (h !== shownH && h < 10) { shownH = h; hHeight.textContent = h; }",
+        "replace": "      if (h !== shownH) { shownH = h; hHeight.textContent = h; }",
+        "why": "Fix: update HUD height for all altitudes, not just below 10m."
+      },
+      {
+        "file": "index.html",
+        "find": "      if (pl.type === \"spring\") {\n        p.vy = JUMP * 0.4; p.springing = true; p.sq = 0.55;",
+        "replace": "      if (pl.type === \"spring\") {\n        p.vy = SPRING; p.springing = true; p.sq = 0.55;",
+        "why": "Fix: use SPRING velocity when landing on a spring platform so it launches the player to the high next platform."
+      },
+      {
+        "file": "index.html",
+        "find": "            if (pl.crumbleT > 0.55) { pl.falling = true; sfx.crack(); burst(pl.x, pl.y, pl.z, 10, 0.8); }",
+        "replace": "            if (pl.crumbleT > 0.55) { pl.falling = true; pl.active = false; sfx.crack(); burst(pl.x, pl.y, pl.z, 10, 0.8); }",
+        "why": "Fix: mark crumbling platform inactive when it falls so it no longer supports the player."
+      }
+    ],
+    "skipped": [],
+    "watchedRecording": true,
+    "createdAt": "2026-10-25T22:26:14.246Z"
+  },
+  {
+    "version": 3,
+    "parent": 2,
+    "iteration": 3,
+    "summary": "Fix the player character facing backwards relative to its movement direction.",
+    "bugs": [
+      {
+        "title": "Player character faces opposite to movement direction",
+        "evidence": "At 0:13 and 0:33, when the player moves forward away from the camera, the character's eyes and cheeks turn toward the camera (opposite to the velocity vector) because p.face uses Math.atan2(-p.vx, -p.vz) even though the face meshes are on local +Z.",
+        "severity": "medium"
+      },
+      {
+        "title": "Not a bug: missed jumps at 0:13 and 0:37",
+        "evidence": "At 0:13 and 0:37 the player misjudged the jump trajectory and fell off the islands.",
+        "severity": "low"
+      }
+    ],
+    "edits": [
+      {
+        "file": "index.html",
+        "find": "        const target = Math.atan2(-p.vx, -p.vz);",
+        "replace": "        const target = Math.atan2(p.vx, p.vz);",
+        "why": "Fix: rotate the player's local +Z face toward the velocity vector instead of away from it."
+      }
+    ],
+    "skipped": [],
+    "watchedRecording": true,
+    "createdAt": "2026-10-25T22:28:42.634Z"
+  }
+]
