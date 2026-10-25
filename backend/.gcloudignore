@@ -1,0 +1,9 @@
+# Files never uploaded by `gcloud run deploy --source`.
+.gcloudignore
+.git
+.gitignore
+.venv/
+.env
+outputs/
+__pycache__/
+*.pyc

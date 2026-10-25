@@ -79,6 +79,10 @@ async def viewer() -> FileResponse:
 
 @app.get("/models")
 async def list_models() -> list[dict[str, str | int | None]]:
+    # The bucket is the source of truth when uploads are on: local disk is
+    # ephemeral on Cloud Run, so outputs/ only lasts as long as the instance.
+    if cloud.enabled():
+        return await cloud.list_models()
     return await asyncio.to_thread(storage.list_models)
 
 
@@ -125,7 +129,9 @@ async def model3d(request: Model3DRequest, http_request: Request) -> Model3DResp
 
     if cloud.enabled():
         try:
-            url = await cloud.upload(path, f"models/{path.name}", MEDIA_TYPES[request.format])
+            url = await cloud.upload(
+                path, f"models/{path.name}", MEDIA_TYPES[request.format], {"prompt": request.prompt[:1000]}
+            )
         except Exception as e:
             raise HTTPException(
                 status_code=502,

@@ -79,6 +79,28 @@ Set in `.env`:
 The service account only needs **Storage Object Creator** on the bucket. Keep
 the key outside the repo — this repo is public.
 
+## Deploy (Cloud Run)
+
+Runs as the `argon-uploader` service account, so no key file is needed. The
+Gemini key comes from Secret Manager. With uploads on, `/models` lists the
+bucket rather than local disk, which Cloud Run wipes on every restart.
+
+    P=printbot-f7f6d R=us-central1
+    gcloud builds submit --project=$P --region=$R --tag $R-docker.pkg.dev/$P/argonr/backend:latest .
+    gcloud run deploy argonr-backend --project=$P --region=$R \
+      --image=$R-docker.pkg.dev/$P/argonr/backend:latest \
+      --service-account=argon-uploader@$P.iam.gserviceaccount.com \
+      --set-secrets=GEMINI_API_KEY=gemini-api-key:latest \
+      --set-env-vars=GCS_BUCKET=argon-hackathon-models-383c2c,GCS_PUBLIC_URLS=true,GEMINI_MODEL=gemini-4-argon \
+      --allow-unauthenticated --timeout=300 --max-instances=3 --memory=512Mi
+
+One-time setup: the `gemini-api-key` secret must exist, and the service account
+needs **Secret Manager Secret Accessor** on it plus **Storage Object Creator**
+and **Storage Object Viewer** on the bucket.
+
+The service is public so the phone can reach it, which also means anyone with
+the URL can spend Gemini quota. `--max-instances` caps the damage.
+
 ## Layout
 
     app/main.py           routes
