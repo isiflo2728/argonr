@@ -144,7 +144,9 @@ def worker(job):
                                if JOBS[job]["has_reference"] else None,
                 "object_count": min(1 + index, 4) if JOBS[job]["kind"] == "scene" else None,
                 "model_path": model_url(job, index) if path else None,
-                "headline": HEADLINES[min(index, len(HEADLINES) - 1)],
+                "headline": (JOBS[job]["requests"][-1]
+                             if JOBS[job]["requests"]
+                             else HEADLINES[min(index, len(HEADLINES) - 1)]),
                 "defects": DEFECTS[index:index + 2],
             })
 
@@ -210,7 +212,7 @@ class Handler(BaseHTTPRequestHandler):
                              "stage": "generating",
                              "iteration": 0, "total_iterations": FIRST_PASS,
                              "target": FIRST_PASS, "done": False, "running": False,
-                             "iterations": [], "error": None}
+                             "iterations": [], "requests": [], "error": None}
 
             size = len(video or image or b"")
             source = "video" if video else "image" if image else "hint only"
@@ -223,13 +225,18 @@ class Handler(BaseHTTPRequestHandler):
 
         if len(parts) == 2 and parts[0] == "iterate":
             job = parts[1]
+            try:
+                instruction = json.loads(body or b"{}").get("instruction", "")
+            except json.JSONDecodeError:
+                instruction = ""
             with LOCK:
                 if job not in JOBS:
                     return self._send(404, b'{"error":"no such job"}')
                 JOBS[job]["target"] += 1
                 JOBS[job]["total_iterations"] = JOBS[job]["target"]
+                JOBS[job]["requests"].append(instruction)
             start_worker(job)
-            print(f"[mock] job {job}: iterate -> target {JOBS[job]['target']}")
+            print(f"[mock] job {job}: iterate {instruction!r} -> target {JOBS[job]['target']}")
             return self._send(200, b'{"ok":true}')
 
         self._send(404, b'{"error":"not found"}')
@@ -241,7 +248,8 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 state = JOBS.get(parts[1])
                 payload = {k: v for k, v in state.items()
-                           if k not in ("running", "has_reference", "hint", "kind")} if state else None
+                           if k not in ("running", "has_reference", "hint", "kind",
+                                        "requests")} if state else None
             body = json.dumps(payload).encode() if payload else b'{"error":"no such job"}'
             return self._send(200 if payload else 404, body)
 

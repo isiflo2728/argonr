@@ -43,6 +43,10 @@ final class AppModel {
     var errorMessage: String?
     var loaderNote: String = ""
     var isIterating = false
+    /// What the user last asked for, shown while that pass runs.
+    var lastInstruction = ""
+    /// Everything they have asked for, in order.
+    var requests: [String] = []
 
     private var jobId: String?
     private var pollTask: Task<Void, Never>?
@@ -52,6 +56,8 @@ final class AppModel {
     var selectedModelURL: URL? { modelURLs[selected] }
     var selectedIteration: IterationInfo? { iterations.first { $0.index == selected } }
     var isRunning: Bool { !(status?.done ?? true) }
+    /// Anything in flight — used to cover the viewer while a pass runs.
+    var isWorking: Bool { isRunning || isIterating }
 
     /// What the capture well shows — video thumbnail or the photo.
     var previewImage: UIImage? { videoThumbnail ?? capturedImage }
@@ -147,15 +153,20 @@ final class AppModel {
         }
     }
 
-    /// One more pass, on demand. This is the demo gesture — tap it standing in
-    /// the scene and watch it sharpen around you.
-    func iterate() {
+    /// Another pass, steered by what the user asked for. This is the whole
+    /// interaction: stand in the scene, say what is wrong, watch it change.
+    /// An empty instruction lets the loop keep going on its own judgement.
+    func iterate(instruction: String = "") {
         guard let job = jobId, canIterate else { return }
+        let asked = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+
         isIterating = true
+        lastInstruction = asked
+        if !asked.isEmpty { requests.append(asked) }
 
         pollTask = Task {
             do {
-                try await APIClient.shared.iterate(job: job)
+                try await APIClient.shared.iterate(job: job, instruction: asked)
                 await poll(job: job)
             } catch {
                 loaderNote = error.localizedDescription
@@ -192,6 +203,8 @@ final class AppModel {
         loaderNote = ""
         jobId = nil
         isIterating = false
+        lastInstruction = ""
+        requests = []
     }
 
     // MARK: - Polling
@@ -213,7 +226,7 @@ final class AppModel {
                     // A job can finish having produced no model at all — most
                     // often because Blender is missing on the laptop. Say so
                     // instead of parking on the progress screen forever.
-                    if modelURLs.isEmpty {
+                    if modelURLs.isEmpty && phase != .viewing {
                         errorMessage = iterations.isEmpty
                             ? "The laptop finished without building anything. Is the loop server running?"
                             : "The loop ran but exported no model. Is Blender installed on the laptop?"

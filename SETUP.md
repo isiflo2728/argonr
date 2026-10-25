@@ -41,8 +41,9 @@ if plain HTTP gets blocked; try without it first.
 
     CaptureScreen   record a 10s orbit (or fall back to one photo)
     GeneratingScreen  live loop stages, current defect in Argon's words
-    ViewerScreen    AR + version strip; tap v0 / v5 to swap in place,
-                    Iterate for another pass without leaving AR
+    ViewerScreen    AR + version strip; tap v0 / v5 to swap in place.
+                    Type what should change and send — the scene stays
+                    anchored under a loading overlay while it rebuilds.
 
 The viewer opens the moment iteration 0 lands, so the model is on the table
 while the loop is still improving it. That swap is the demo.

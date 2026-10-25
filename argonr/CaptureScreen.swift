@@ -16,7 +16,7 @@ struct CaptureScreen: View {
     @Bindable var app: AppModel
 
     @State private var cameraMode: CameraPicker.Mode?
-    @State private var videoItem: PhotosPickerItem?
+    @State private var libraryItem: PhotosPickerItem?
     @FocusState private var hintFocused: Bool
 
     var body: some View {
@@ -56,11 +56,16 @@ struct CaptureScreen: View {
                          onVideo: { app.acceptVideo($0) })
                 .ignoresSafeArea()
         }
-        .onChange(of: videoItem) { _, item in
+        .onChange(of: libraryItem) { _, item in
             guard let item else { return }
             Task {
+                // A library pick can be either, so try the clip first and fall
+                // back to treating it as a still.
                 if let movie = try? await item.loadTransferable(type: MovieFile.self) {
                     app.acceptVideo(movie.url)
+                } else if let data = try? await item.loadTransferable(type: Data.self),
+                          let image = UIImage(data: data) {
+                    app.acceptPhoto(image)
                 }
             }
         }
@@ -129,7 +134,7 @@ struct CaptureScreen: View {
     private var clearButton: some View {
         Button {
             app.clearCapture()
-            videoItem = nil
+            libraryItem = nil
         } label: {
             Image(systemName: "xmark")
                 .font(.footnote.weight(.bold))
@@ -148,28 +153,28 @@ struct CaptureScreen: View {
                 Button {
                     cameraMode = .video
                 } label: {
-                    Label("Record orbit", systemImage: "video.fill")
+                    Label("Record", systemImage: "video.fill")
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                 }
                 .buttonStyle(.bordered)
 
-                PhotosPicker(selection: $videoItem, matching: .videos) {
-                    Label("Choose clip", systemImage: "film")
+                Button {
+                    cameraMode = .photo
+                } label: {
+                    Label("Take a photo", systemImage: "camera.fill")
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                 }
                 .buttonStyle(.bordered)
             }
 
-            Text("Up to \(Int(MediaPrep.maxSeconds))s, kept centred. Several things on one surface works better than a whole room.")
+            Text("A slow circle works best — Argon sees every side. One photo works too, and it guesses the back.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
 
-            Button {
-                cameraMode = .photo
-            } label: {
-                Label("Use a single photo instead", systemImage: "camera")
+            PhotosPicker(selection: $libraryItem, matching: .any(of: [.videos, .images])) {
+                Label("Choose from library", systemImage: "photo.on.rectangle")
                     .font(.footnote)
             }
             .buttonStyle(.plain)

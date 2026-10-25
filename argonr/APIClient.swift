@@ -79,12 +79,16 @@ struct APIClient {
         return try decoder.decode(StartResponse.self, from: data).jobId
     }
 
-    /// POST /iterate/{job} — asks for one more pass on demand.
-    func iterate(job: String) async throws {
+    /// POST /iterate/{job} — another pass, optionally steered by the user.
+    /// An empty instruction means "keep improving on your own judgement".
+    func iterate(job: String, instruction: String) async throws {
         var req = URLRequest(url: Config.baseURL
             .appendingPathComponent("iterate")
             .appendingPathComponent(job))
         req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["instruction": instruction])
+
         let (_, response) = try await session.data(for: req)
         try check(response)
     }

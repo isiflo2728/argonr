@@ -18,6 +18,8 @@ struct ViewerScreen: View {
     @State private var arNote = ""
     @State private var showDefects = false
     @State private var showReference = false
+    @State private var instruction = ""
+    @FocusState private var instructionFocused: Bool
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -33,8 +35,13 @@ struct ViewerScreen: View {
                 if showDefects { defectPanel }
                 bottomBar
             }
+
+            // Sits over the AR view rather than replacing it. Leaving AR would
+            // tear down the session and cost the user their floor every pass.
+            if app.isWorking { workingOverlay }
         }
         .animation(.snappy, value: app.selected)
+        .animation(.snappy, value: app.isWorking)
         .animation(.snappy, value: showDefects)
         .sheet(isPresented: $showReference) { referenceSheet }
     }
@@ -45,7 +52,6 @@ struct ViewerScreen: View {
         HStack(alignment: .top, spacing: 8) {
             scoreCard
             Spacer()
-            if app.isRunning { workingPill }
             if app.capturedImage != nil { referenceButton }
             closeButton
         }
@@ -77,18 +83,6 @@ struct ViewerScreen: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.ultraThinMaterial, in: .rect(cornerRadius: 10))
-    }
-
-    private var workingPill: some View {
-        HStack(spacing: 8) {
-            ProgressView().controlSize(.mini)
-            Text(app.status?.stageLabel ?? "Working")
-                .font(.caption)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: .capsule)
     }
 
     private var referenceButton: some View {
@@ -218,32 +212,84 @@ struct ViewerScreen: View {
                 .accessibilityLabel(showDefects ? "Hide defects" : "Show defects")
             }
 
-            iterateButton
+            promptBar
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
     }
 
-    private var iterateButton: some View {
-        Button {
-            app.iterate()
-        } label: {
-            HStack(spacing: 8) {
-                if app.isRunning || app.isIterating {
-                    ProgressView().controlSize(.small)
-                    Text("Improving")
-                } else {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                    Text("Iterate")
+    private var promptBar: some View {
+        HStack(spacing: 8) {
+            TextField("Make the mug taller…", text: $instruction, axis: .vertical)
+                .lineLimit(1...3)
+                .textFieldStyle(.plain)
+                .font(.subheadline)
+                .focused($instructionFocused)
+                .submitLabel(.send)
+                .onSubmit(send)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial, in: .capsule)
+                .accessibilityLabel("What should change")
+
+            Button(action: send) {
+                Image(systemName: "arrow.up")
+                    .font(.headline)
+                    .frame(width: 44, height: 44)
+                    .background(canSend ? AnyShapeStyle(.tint) : AnyShapeStyle(.ultraThinMaterial),
+                                in: .circle)
+                    .foregroundStyle(canSend ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+            }
+            .disabled(!canSend)
+            .accessibilityLabel("Send this change")
+        }
+    }
+
+    private var canSend: Bool {
+        app.canIterate && !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func send() {
+        guard canSend else { return }
+        instructionFocused = false
+        app.iterate(instruction: instruction)
+        instruction = ""
+    }
+
+    // MARK: - Working
+
+    private var workingOverlay: some View {
+        ZStack {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea()
+
+            VStack(spacing: 16) {
+                ProgressView()
+                    .controlSize(.large)
+
+                Text(app.status?.stageLabel ?? "Working")
+                    .font(.headline)
+                    .contentTransition(.opacity)
+
+                if !app.lastInstruction.isEmpty {
+                    Text("\u{201C}\(app.lastInstruction)\u{201D}")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+
+                if let defect = app.iterations.last?.defects.first {
+                    Text(defect.evidence)
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
                 }
             }
-            .font(.headline)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
         }
-        .buttonStyle(.borderedProminent)
-        .disabled(!app.canIterate)
-        .accessibilityHint("Asks Argon for another pass at this model")
+        .transition(.opacity)
     }
 
     private func versionChip(_ iteration: IterationInfo) -> some View {
