@@ -39,14 +39,20 @@ if plain HTTP gets blocked; try without it first.
 
 ## 3. What's wired
 
-    CaptureScreen   record a 10s orbit (or fall back to one photo)
-    GeneratingScreen  live loop stages, current defect in Argon's words
-    ViewerScreen    AR + version strip; tap v0 / v5 to swap in place.
-                    Type what should change and send — the scene stays
-                    anchored under a loading overlay while it rebuilds.
+The app is a viewer. Models are built elsewhere; its job is to put one on the
+table in front of you and let you say what should change.
 
-The viewer opens the moment iteration 0 lands, so the model is on the table
-while the loop is still improving it. That swap is the demo.
+    LoadScreen    paste a model URL, or attach to a job on the loop server
+    ViewerScreen  AR placement, version strip, and a text field for changes
+
+Two ways in, deliberately:
+
+**Paste a URL.** Renders anything reachable. No versions and no iteration, but
+it cannot be broken by a backend being down — which is the one thing you want
+guaranteed when a judge is holding the phone.
+
+**Attach to a job.** Adds the version strip and the ability to ask for
+changes. Needs the three endpoints below.
 
 ## 4. The contract
 

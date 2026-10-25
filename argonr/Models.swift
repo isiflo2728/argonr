@@ -54,6 +54,17 @@ struct IterationInfo: Decodable, Identifiable, Equatable {
 
     var id: Int { index }
 
+    init(index: Int, score: Double, matchScore: Double?, objectCount: Int?,
+         modelPath: String?, headline: String?, defects: [Defect]) {
+        self.index = index
+        self.score = score
+        self.matchScore = matchScore
+        self.objectCount = objectCount
+        self.modelPath = modelPath
+        self.headline = headline
+        self.defects = defects
+    }
+
     static func == (a: IterationInfo, b: IterationInfo) -> Bool {
         a.index == b.index && a.score == b.score && a.modelPath == b.modelPath
     }

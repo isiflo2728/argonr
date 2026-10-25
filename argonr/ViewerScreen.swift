@@ -17,7 +17,6 @@ struct ViewerScreen: View {
 
     @State private var arNote = ""
     @State private var showDefects = false
-    @State private var showReference = false
     @State private var instruction = ""
     @FocusState private var instructionFocused: Bool
 
@@ -43,7 +42,6 @@ struct ViewerScreen: View {
         .animation(.snappy, value: app.selected)
         .animation(.snappy, value: app.isWorking)
         .animation(.snappy, value: showDefects)
-        .sheet(isPresented: $showReference) { referenceSheet }
     }
 
     // MARK: - Top
@@ -52,7 +50,6 @@ struct ViewerScreen: View {
         HStack(alignment: .top, spacing: 8) {
             scoreCard
             Spacer()
-            if app.capturedImage != nil { referenceButton }
             closeButton
         }
         .padding(.horizontal, 16)
@@ -85,21 +82,6 @@ struct ViewerScreen: View {
         .background(.ultraThinMaterial, in: .rect(cornerRadius: 10))
     }
 
-    private var referenceButton: some View {
-        Button {
-            showReference = true
-        } label: {
-            if let image = app.capturedImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 44, height: 44)
-                    .clipShape(.rect(cornerRadius: 10))
-            }
-        }
-        .accessibilityLabel("Compare with your photo")
-    }
-
     private var closeButton: some View {
         Button {
             app.startOver()
@@ -110,24 +92,6 @@ struct ViewerScreen: View {
                 .background(.ultraThinMaterial, in: .circle)
         }
         .accessibilityLabel("Start over")
-    }
-
-    private var referenceSheet: some View {
-        VStack(spacing: 16) {
-            if let image = app.capturedImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .accessibilityLabel("Your reference photo")
-            }
-            Text(app.capturedVideo != nil ? "The clip Argon scores the model against"
-                                              : "What Argon scores the model against")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 24)
-        }
-        .padding(.top, 24)
-        .presentationDetents([.medium, .large])
     }
 
     // MARK: - Defects

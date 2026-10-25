@@ -2,13 +2,15 @@
 //  AppModel.swift
 //  argonr
 //
-//  Owns the job lifecycle: send the capture, poll the laptop, pull each .usdz
-//  down as it lands. The viewer opens as soon as iteration 0 arrives, so the
-//  result is on the floor while the loop is still improving it.
+//  This app is the viewer. Models are built elsewhere; its job is to put one
+//  on the table in front of you, let you say what should change, and show the
+//  result without losing your place in the room.
 //
-//  Video is the primary input — an orbit gives Argon every side, and Argon is
-//  strongest on video. A single photo stays supported because on the day
-//  someone's recording will fail and you want a one-tap retreat.
+//  Two ways in, because a demo should not depend on a backend being up:
+//
+//    direct  — paste a URL, render it. Always works if the file exists.
+//    job     — attach to a job on the loop server. Adds versions and the
+//              ability to ask for changes.
 //
 
 import Foundation
@@ -19,30 +21,26 @@ import UIKit
 @Observable
 final class AppModel {
 
-    enum Phase { case capture, generating, viewing }
+    enum Phase { case load, viewing }
 
-    var phase: Phase = .capture
-    var kind: CaptureKind = .scene
+    var phase: Phase = .load
 
-    /// Set for a photo capture.
-    var capturedImage: UIImage?
-    /// Set for a video capture, already compressed and trimmed.
-    var capturedVideo: URL?
-    /// First frame of the video, for the capture well.
-    var videoThumbnail: UIImage?
-    var videoSeconds: Double?
-    var isPreparing = false
-
-    var hint: String = ""
+    // Entry
+    var directURL = ""
+    var jobIdInput = ""
     var serverBase: String = Config.serverBase
 
+    // Session
+    var kind: CaptureKind = .scene
     var status: JobStatus?
     var iterations: [IterationInfo] = []
-    var selected: Int = 0
+    var selected = 0
     var modelURLs: [Int: URL] = [:]
     var errorMessage: String?
-    var loaderNote: String = ""
+    var loaderNote = ""
     var isIterating = false
+    var isLoadingDirect = false
+
     /// What the user last asked for, shown while that pass runs.
     var lastInstruction = ""
     /// Everything they have asked for, in order.
@@ -55,22 +53,21 @@ final class AppModel {
 
     var selectedModelURL: URL? { modelURLs[selected] }
     var selectedIteration: IterationInfo? { iterations.first { $0.index == selected } }
-    var isRunning: Bool { !(status?.done ?? true) }
-    /// Anything in flight — used to cover the viewer while a pass runs.
-    var isWorking: Bool { isRunning || isIterating }
 
-    /// What the capture well shows — video thumbnail or the photo.
-    var previewImage: UIImage? { videoThumbnail ?? capturedImage }
+    var isRunning: Bool { status.map { !$0.done } ?? false }
+    var isWorking: Bool { isRunning || isIterating || isLoadingDirect }
 
-    var hasCapture: Bool { capturedVideo != nil || capturedImage != nil }
+    /// Only a job can be iterated — a pasted URL has nothing behind it.
+    var canIterate: Bool { jobId != nil && !isWorking }
+    var isAttached: Bool { jobId != nil }
 
-    var canGenerate: Bool {
-        guard !isPreparing else { return false }
-        return hasCapture || !hint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    var canOpenDirect: Bool {
+        !isWorking && URL(string: directURL.trimmingCharacters(in: .whitespacesAndNewlines))?.scheme != nil
     }
 
-    /// Iterating only makes sense once a pass has finished.
-    var canIterate: Bool { jobId != nil && !isRunning && !isIterating }
+    var canAttach: Bool {
+        !isWorking && !jobIdInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var scoreText: String {
         guard let score = selectedIteration?.score else { return "—" }
@@ -87,75 +84,48 @@ final class AppModel {
         return count == 1 ? "1 object" : "\(count) objects"
     }
 
-    var durationText: String? {
-        guard let seconds = videoSeconds else { return nil }
-        return String(format: "%.1fs", seconds)
-    }
+    // MARK: - Direct
 
-    // MARK: - Capture
+    /// Paste a URL, render it. No job, no versions, no iteration — but it
+    /// cannot be broken by a backend that is down.
+    func openDirect() {
+        let text = directURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let _ = URL(string: text) else { return }
 
-    /// Compresses off the main thread and keeps the thumbnail in step.
-    func acceptVideo(_ source: URL) {
-        isPreparing = true
-        errorMessage = nil
-        capturedImage = nil
+        reset()
+        isLoadingDirect = true
 
         Task {
             do {
-                let compressed = try await MediaPrep.compress(source)
-                capturedVideo = compressed
-                videoThumbnail = await MediaPrep.thumbnail(compressed)
-                videoSeconds = await MediaPrep.seconds(of: compressed)
-                kind = .scene
+                let local = try await APIClient.shared.downloadModel(
+                    path: text, job: "direct", iteration: 0)
+                modelURLs[0] = local
+                iterations = [IterationInfo(
+                    index: 0, score: 0, matchScore: nil, objectCount: nil,
+                    modelPath: text, headline: "loaded", defects: [])]
+                selected = 0
+                phase = .viewing
             } catch {
                 errorMessage = error.localizedDescription
             }
-            isPreparing = false
+            isLoadingDirect = false
         }
     }
 
-    func acceptPhoto(_ image: UIImage) {
-        clearCapture()
-        capturedImage = image
-        kind = .object
-    }
+    // MARK: - Job
 
-    func clearCapture() {
-        capturedImage = nil
-        capturedVideo = nil
-        videoThumbnail = nil
-        videoSeconds = nil
-    }
-
-    // MARK: - Lifecycle
-
-    func generate() {
-        guard canGenerate else { return }
-
+    func attachToJob() {
         Config.serverBase = serverBase.trimmingCharacters(in: .whitespacesAndNewlines)
-        let video = capturedVideo
-        let jpeg = capturedImage?.jpegData(compressionQuality: 0.8)
-        let hintText = hint.trimmingCharacters(in: .whitespacesAndNewlines)
-        let captureKind = kind
+        let job = jobIdInput.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        resetJob()
-        phase = .generating
+        reset()
+        jobId = job
 
-        pollTask = Task {
-            do {
-                let id = try await APIClient.shared.start(
-                    videoURL: video, imageJPEG: jpeg, hint: hintText, kind: captureKind)
-                jobId = id
-                await poll(job: id)
-            } catch {
-                fail(error)
-            }
-        }
+        pollTask = Task { await poll(job: job) }
     }
 
     /// Another pass, steered by what the user asked for. This is the whole
     /// interaction: stand in the scene, say what is wrong, watch it change.
-    /// An empty instruction lets the loop keep going on its own judgement.
     func iterate(instruction: String = "") {
         guard let job = jobId, canIterate else { return }
         let asked = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -175,26 +145,16 @@ final class AppModel {
         }
     }
 
-    func cancel() {
-        pollTask?.cancel()
-        pollTask = nil
-        phase = .capture
-    }
+    func select(_ index: Int) { selected = index }
 
     func startOver() {
         pollTask?.cancel()
         pollTask = nil
-        resetJob()
-        clearCapture()
-        hint = ""
-        phase = .capture
+        reset()
+        phase = .load
     }
 
-    func select(_ index: Int) {
-        selected = index
-    }
-
-    private func resetJob() {
+    private func reset() {
         status = nil
         iterations = []
         modelURLs = [:]
@@ -210,9 +170,12 @@ final class AppModel {
     // MARK: - Polling
 
     private func poll(job: String) async {
+        var sawAnything = false
+
         while !Task.isCancelled {
             do {
                 let snapshot = try await APIClient.shared.status(job: job)
+                sawAnything = true
                 status = snapshot
                 iterations = snapshot.iterations.sorted { $0.index < $1.index }
 
@@ -223,18 +186,18 @@ final class AppModel {
                 await downloadNewModels(job: job)
 
                 if snapshot.done {
-                    // A job can finish having produced no model at all — most
-                    // often because Blender is missing on the laptop. Say so
-                    // instead of parking on the progress screen forever.
                     if modelURLs.isEmpty && phase != .viewing {
-                        errorMessage = iterations.isEmpty
-                            ? "The laptop finished without building anything. Is the loop server running?"
-                            : "The loop ran but exported no model. Is Blender installed on the laptop?"
-                        phase = .capture
+                        errorMessage = "That job has not produced a model yet."
+                        phase = .load
                     }
                     break
                 }
             } catch {
+                if !sawAnything {
+                    errorMessage = "Couldn't reach that job — \(error.localizedDescription)"
+                    phase = .load
+                    return
+                }
                 // A dropped poll on venue wifi is not fatal — keep trying.
                 loaderNote = error.localizedDescription
             }
@@ -252,18 +215,16 @@ final class AppModel {
                 modelURLs[iteration.index] = url
 
                 // First model down: get it into the room immediately.
-                if phase == .generating {
+                if phase == .load {
                     selected = iteration.index
                     phase = .viewing
+                } else if iteration.index > selected {
+                    // A newer version landed while watching — show it.
+                    selected = iteration.index
                 }
             } catch {
                 loaderNote = "Couldn't fetch v\(iteration.index): \(error.localizedDescription)"
             }
         }
-    }
-
-    private func fail(_ error: Error) {
-        errorMessage = error.localizedDescription
-        phase = .capture
     }
 }

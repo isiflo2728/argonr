@@ -12,10 +12,8 @@ struct ContentView: View {
 
     var body: some View {
         switch app.phase {
-        case .capture:
-            CaptureScreen(app: app)
-        case .generating:
-            GeneratingScreen(app: app)
+        case .load:
+            LoadScreen(app: app)
         case .viewing:
             ViewerScreen(app: app)
         }
