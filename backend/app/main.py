@@ -68,7 +68,12 @@ class RefineResponse(Model3DResponse):
     parent: str = Field(description="Filename of the model that was refined")
     assessment: str = Field(description="What Argon saw wrong with the model in the photo")
     changes: list[str] = Field(description="What was changed")
-    scale: float = Field(description="Overall scale applied: target_size_m / apparent_size_m")
+    scale: float = Field(description="Scale applied to the file to bring it to real_size_m")
+    real_size_m: float = Field(description="Real-world size of the object's largest side; the file is now this size")
+    display_scale: float = Field(
+        description="How much larger the model should LOOK than it did in the photo (target / apparent). "
+        "Apply this in viewers that resize models on placement; the file itself is real size."
+    )
     apparent_size_m: float = Field(description="How big Argon judged the model looked in the photo (largest side)")
     target_size_m: float = Field(description="How big Argon judged it should look in that scene (largest side)")
     size_m: list[float] = Field(description="New size [width, height, depth] in meters")
@@ -255,6 +260,8 @@ async def refine_model(
         assessment=plan.assessment,
         changes=plan.changes,
         scale=round(scale, 4),
+        real_size_m=plan.real_size_m,
+        display_scale=round(refine.display_scale(plan), 4),
         apparent_size_m=plan.apparent_size_m,
         target_size_m=plan.target_size_m,
         size_m=[round(s, 4) for s in refine.size(refined)],

@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from app.mesh import Part, Scene
 
 MIN_SCALE, MAX_SCALE = 0.05, 20.0
+MIN_REAL_SIZE_M, MAX_REAL_SIZE_M = 0.01, 50.0
 
 
 class PartEdit(BaseModel):
@@ -35,6 +36,10 @@ class RefinePlan(BaseModel):
     target_size_m: float = Field(
         description="How large that dimension SHOULD appear for this object to look right in this scene, "
         "in meters. Equal to apparent_size_m if the size already looks right."
+    )
+    real_size_m: float = Field(
+        description="The typical real-world size of this kind of object's largest dimension, in meters "
+        "(e.g. a dining chair ~0.9, a teapot ~0.25, a car ~4.5)"
     )
     part_edits: list[PartEdit] = Field(description="Changes to existing parts; empty if none")
     new_parts: list[Part] = Field(description="Parts to add (same coordinate system as the model); usually empty")
@@ -92,8 +97,15 @@ def prompt(scene: Scene, note: str) -> str:
     return text
 
 
+def display_scale(plan: RefinePlan) -> float:
+    """How much larger the model should LOOK in the viewer: target / apparent, from the photo."""
+    if plan.apparent_size_m > 0 and plan.target_size_m > 0:
+        return min(max(plan.target_size_m / plan.apparent_size_m, MIN_SCALE), MAX_SCALE)
+    return 1.0
+
+
 def apply(scene: Scene, plan: RefinePlan) -> tuple[Scene, float, list[str]]:
-    """Apply a plan. Returns the new scene, the overall scale used, and edits that were skipped."""
+    """Apply a plan. Returns the new scene, the file scale applied, and edits that were skipped."""
     edits = {e.name.strip().lower(): e for e in plan.part_edits}
     skipped = [e.name for e in plan.part_edits if e.name.strip().lower() not in {p.name.lower() for p in scene.parts}]
 
@@ -119,13 +131,15 @@ def apply(scene: Scene, plan: RefinePlan) -> tuple[Scene, float, list[str]]:
     if not parts:
         raise ValueError("The refinement removed every part")
 
-    # Overall scale is the ratio of how big the model should look to how big it
-    # looks in the photo. A ratio, not an absolute size, because AR viewers often
-    # rescale models on placement, so the file's own size says nothing about what
-    # the user saw. Computed here rather than trusting the model's arithmetic.
+    # The file is kept at the object's real-world size. Not the "looks N times too
+    # small" ratio: AR viewers often rescale models on placement (argonr fits every
+    # object to 0.3 m), so applying that ratio to the file changes nothing on
+    # screen and compounds with every refinement. The ratio is returned to the
+    # client as display_scale instead.
     refined = Scene(name=scene.name, parts=parts)
-    if plan.apparent_size_m > 0 and plan.target_size_m > 0:
-        scale = min(max(plan.target_size_m / plan.apparent_size_m, MIN_SCALE), MAX_SCALE)
+    current = max(size(refined)) or 1.0
+    if MIN_REAL_SIZE_M <= plan.real_size_m <= MAX_REAL_SIZE_M:
+        scale = plan.real_size_m / current
     else:
         scale = 1.0
     # Rest the result on y = 0, centered in x and z.

@@ -60,29 +60,30 @@ Place a generated model in AR, take a screenshot, and send it back:
 
 Argon looks at the model against its surroundings and returns a plan: how big
 the model **appears** and how big it **should** appear (both judged from the
-photo), plus edits to parts — recolor, resize, move, remove, add. The server
-applies it and saves a new version linked to its `parent`; refine that one with
-another screenshot to keep improving. Takes ~15 seconds.
+photo), the object's **real-world size**, and edits to parts — recolor, resize,
+move, remove, add. The server applies it and saves a new version linked to its
+`parent`; refine that one with another screenshot to keep improving. Takes ~10 s.
 
 ```json
 {
-  "url": "https://storage.googleapis.com/.../20261025-131801-a-blue-ceramic-teapot-refined-95a872.glb",
+  "url": "https://storage.googleapis.com/.../20261025-...-a-blue-ceramic-teapot-refined-....glb",
   "parent": "20261025-195504-a-blue-ceramic-teapot-e90a5a.glb",
-  "assessment": "The teapot appears miniature next to the coffee mug, measuring only about 4.5 cm across...",
-  "changes": ["Scaled the teapot up ... to ~23 cm wide", "Matched the lid and knob color to the body"],
-  "scale": 5.11, "apparent_size_m": 0.045, "target_size_m": 0.23,
-  "size_m": [1.50, 0.89, 0.88]
+  "assessment": "The teapot appears miniature next to the coffee mug...",
+  "changes": ["...", "Matched the lid knob color to the blue ceramic lid"],
+  "real_size_m": 0.25, "size_m": [0.25, 0.15, 0.15],
+  "display_scale": 4.9, "apparent_size_m": 0.045, "target_size_m": 0.22
 }
 ```
 
-The scale is a **ratio** (`target / apparent`), because AR viewers often
-rescale models when placing them, so the file's own size says nothing about
-what the user saw. Two consequences:
+**Size works in two parts:**
 
-- If the viewer **auto-fits models to a fixed size** (argonr's app fits objects
-  to 0.3 m), rescaling the file changes nothing on screen. Use
-  `target_size_m` to set the display size in the app instead.
-- In a **true-scale** viewer, the new file size is what you'll see.
+- The **file** is always set to the object's real-world size (`real_size_m`),
+  so viewers that place models at true scale show it correctly, and repeated
+  refinements never inflate it.
+- **`display_scale`** says how much larger it should *look* than in the photo.
+  Viewers that resize models on placement ignore file size — argonr's app fits
+  every object to 0.3 m — so they must apply this themselves, or switch to
+  placing models at their real size.
 
 Every model stores the `Scene` it was built from (`scenes/<name>.json` in the
 bucket) so it can be edited. Older GLBs without one are read back from the GLB.
