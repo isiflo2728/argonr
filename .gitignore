@@ -4,3 +4,4 @@ recordings/
 archive/*/recordings/
 .playtest-profile/
 .DS_Store
+backups/
