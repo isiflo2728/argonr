@@ -58,3 +58,27 @@ struct LibraryModel: Decodable, Identifiable, Equatable {
         ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
     }
 }
+
+/// POST /refine — hands the backend a photo of the model sitting in the real
+/// world, so the next pass can correct what only that view reveals: scale
+/// against real objects, proportions seen from a human angle, parts that
+/// read wrong at actual size.
+///
+/// The response is the same shape as /model3d, so a refined model replaces
+/// the current one with no special handling.
+struct RefineRequest: Encodable {
+    /// Which model this is a view of.
+    let filename: String
+    /// What it was originally asked to be.
+    let prompt: String
+    /// JPEG of the AR view, base64.
+    let imageB64: String
+    /// Optional: what the person wants changed.
+    let note: String
+    let format = "usda"
+
+    enum CodingKeys: String, CodingKey {
+        case filename, prompt, note, format
+        case imageB64 = "image_b64"
+    }
+}

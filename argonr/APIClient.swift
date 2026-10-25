@@ -53,6 +53,21 @@ struct APIClient {
         return try decoder.decode(GeneratedModel.self, from: data)
     }
 
+    /// POST /refine — improves a model using a photo of it in place.
+    /// Returns the same shape as /model3d.
+    func refine(filename: String, prompt: String, imageJPEG: Data, note: String) async throws -> GeneratedModel {
+        var request = URLRequest(url: Config.baseURL.appendingPathComponent("refine"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(
+            RefineRequest(filename: filename, prompt: prompt,
+                          imageB64: imageJPEG.base64EncodedString(), note: note))
+
+        let (data, response) = try await session.data(for: request)
+        try check(response, data)
+        return try decoder.decode(GeneratedModel.self, from: data)
+    }
+
     /// GET /models — everything built so far.
     func library() async throws -> [LibraryModel] {
         let (data, response) = try await session.data(

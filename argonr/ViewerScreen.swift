@@ -9,25 +9,32 @@
 import SwiftUI
 
 struct ViewerScreen: View {
-    var app: AppModel
+    @Bindable var app: AppModel
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var note = ""
+    @FocusState private var noteFocused: Bool
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            ARContainerView(modelURL: app.modelURL, kind: .object) { incoming in
-                note = incoming
-            }
-            .ignoresSafeArea()
+            ARContainerView(modelURL: app.modelURL,
+                            kind: .object,
+                            captureTicket: app.captureTicket,
+                            onNote: { note = $0 },
+                            onCapture: app.receive(shot:))
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 topBar
                 Spacer()
                 if !note.isEmpty { noteBubble }
+                bottomBar
             }
+
+            if app.isRefining { refiningOverlay }
         }
         .animation(motion, value: note)
+        .animation(motion, value: app.isRefining)
     }
 
     private var motion: Animation? { reduceMotion ? nil : .snappy }
@@ -60,6 +67,78 @@ struct ViewerScreen: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
+    }
+
+    private var bottomBar: some View {
+        VStack(spacing: 12) {
+            if let error = app.errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: .capsule)
+            }
+
+            HStack(spacing: 8) {
+                TextField("Optional: what looks wrong", text: $app.refineNote, axis: .vertical)
+                    .lineLimit(1...3)
+                    .textFieldStyle(.plain)
+                    .font(.subheadline)
+                    .focused($noteFocused)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial, in: .capsule)
+                    .accessibilityLabel("What looks wrong")
+
+                Button("Improve from this view", systemImage: "camera.viewfinder",
+                       action: capture)
+                    .labelStyle(.iconOnly)
+                    .font(.headline)
+                    .frame(width: 44, height: 44)
+                    .background(app.canRefine ? AnyShapeStyle(.tint)
+                                              : AnyShapeStyle(.ultraThinMaterial),
+                                in: .circle)
+                    .foregroundStyle(app.canRefine ? AnyShapeStyle(.white)
+                                                   : AnyShapeStyle(.secondary))
+                    .buttonStyle(.plain)
+                    .disabled(!app.canRefine)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+    }
+
+    private func capture() {
+        noteFocused = false
+        app.requestCapture()
+    }
+
+    private var refiningOverlay: some View {
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
+            VStack(spacing: 16) {
+                if let shot = app.lastShot {
+                    // Show exactly what was sent — the frame is the input.
+                    Image(uiImage: shot)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxHeight: 280)
+                        .clipShape(.rect(cornerRadius: 10))
+                }
+                ProgressView().controlSize(.large)
+                Text("Improving from this view")
+                    .font(.headline)
+                if !app.refineNote.isEmpty {
+                    Text("\u{201C}\(app.refineNote)\u{201D}")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(32)
+        }
+        .transition(.opacity)
     }
 
     private var noteBubble: some View {

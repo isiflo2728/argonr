@@ -19,9 +19,13 @@ struct ARContainerView: UIViewRepresentable {
     /// Longest side the result is scaled to, and how big a surface it demands.
     /// A desk scene needs real floor; a single mug does not.
     var kind: CaptureKind
+    /// Bumped to ask for a snapshot. A counter rather than a flag, so two
+    /// captures in a row both fire.
+    var captureTicket: Int
     var onNote: (String) -> Void
+    var onCapture: (UIImage) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(onNote: onNote) }
+    func makeCoordinator() -> Coordinator { Coordinator(onNote: onNote, onCapture: onCapture) }
 
     func makeUIView(context: Context) -> ARView {
         let view = ARView(frame: .zero)
@@ -66,8 +70,10 @@ struct ARContainerView: UIViewRepresentable {
 
     func updateUIView(_ uiView: ARView, context: Context) {
         context.coordinator.onNote = onNote
+        context.coordinator.onCapture = onCapture
         context.coordinator.fitMeters = kind.fitMeters
         context.coordinator.load(modelURL)
+        context.coordinator.captureIfAsked(captureTicket)
     }
 
     static func dismantleUIView(_ uiView: ARView, coordinator: Coordinator) {
@@ -80,15 +86,31 @@ struct ARContainerView: UIViewRepresentable {
         var anchor: AnchorEntity?
         var coaching: ARCoachingOverlayView?
         var onNote: (String) -> Void
+        var onCapture: (UIImage) -> Void
         var fitMeters: Float = 0.3
+        private var servedTicket = 0
 
         private var currentURL: URL?
         private var host: ModelEntity?
         private var task: Task<Void, Never>?
 
-        init(onNote: @escaping (String) -> Void) {
+        init(onNote: @escaping (String) -> Void,
+             onCapture: @escaping (UIImage) -> Void) {
             self.onNote = onNote
+            self.onCapture = onCapture
             super.init()
+        }
+
+        /// Snapshots the camera feed with the model composited into it — what
+        /// the person is actually looking at, which is context no server-side
+        /// render has. SwiftUI chrome is a sibling view, so it stays out.
+        func captureIfAsked(_ ticket: Int) {
+            guard ticket > servedTicket, let arView else { return }
+            servedTicket = ticket
+            arView.snapshot(saveToHDR: false) { [weak self] image in
+                guard let self, let image else { return }
+                Task { @MainActor in self.onCapture(image) }
+            }
         }
 
         func load(_ url: URL?) {

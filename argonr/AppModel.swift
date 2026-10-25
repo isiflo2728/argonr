@@ -9,6 +9,7 @@
 
 import Foundation
 import Observation
+import UIKit
 
 @MainActor
 @Observable
@@ -26,6 +27,8 @@ final class AppModel {
     // Library
     var library: [LibraryModel] = []
     var isLoadingLibrary = false
+    /// Optional steer sent alongside the snapshot.
+    var refineNote = ""
     /// nil until checked. Drives the dot next to the address.
     var isReachable: Bool?
 
@@ -38,7 +41,21 @@ final class AppModel {
     var errorMessage: String?
     var arNote = ""
 
-    var isBusy: Bool { isBuilding || isFetching }
+    // Refinement
+    /// Bumped to ask the AR view for a snapshot.
+    var captureTicket = 0
+    var isRefining = false
+    /// The last frame sent, kept so the user can see what Argon was given.
+    var lastShot: UIImage?
+    /// Identifies the model being refined, and what it was asked to be.
+    private var currentFilename = ""
+    private var currentPrompt = ""
+
+    var isBusy: Bool { isBuilding || isFetching || isRefining }
+
+    /// Only a model that came from the backend can be refined — a pasted
+    /// URL has no filename the backend would recognise.
+    var canRefine: Bool { !isBusy && !currentFilename.isEmpty }
 
     var canBuild: Bool {
         !isBusy && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -64,6 +81,8 @@ final class AppModel {
                 let built = try await APIClient.shared.generate(prompt: asked)
                 title = asked
                 subtitle = built.summary
+                currentFilename = built.filename
+                currentPrompt = asked
                 try await show(path: built.url, name: built.filename)
                 prompt = ""
                 await refreshLibrary()
@@ -107,6 +126,8 @@ final class AppModel {
             do {
                 title = model.prompt ?? model.name
                 subtitle = "\(model.format.uppercased()) · \(model.sizeText)"
+                currentFilename = model.name
+                currentPrompt = model.prompt ?? model.name
                 try await show(path: model.bestURL, name: model.name)
             } catch {
                 await report(error)
@@ -129,11 +150,55 @@ final class AppModel {
             do {
                 title = "Pasted model"
                 subtitle = ""
+                currentFilename = ""        // nothing the backend could match
+                currentPrompt = ""
                 try await show(path: text, name: "pasted-\(UUID().uuidString.prefix(8))")
             } catch {
                 await report(error)
             }
             isFetching = false
+        }
+    }
+
+    // MARK: - Refine
+
+    /// Asks the AR view for a frame. The result arrives in `receive(shot:)`.
+    func requestCapture() {
+        guard canRefine else { return }
+        captureTicket += 1
+    }
+
+    /// A snapshot came back: send it with the model's identity and let the
+    /// backend decide what to fix.
+    func receive(shot: UIImage) {
+        guard !isRefining, !currentFilename.isEmpty,
+              let jpeg = shot.jpegData(compressionQuality: 0.8) else { return }
+
+        lastShot = shot
+        isRefining = true
+        errorMessage = nil
+
+        let filename = currentFilename
+        let prompt = currentPrompt
+        let note = refineNote.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        Task {
+            do {
+                let refined = try await APIClient.shared.refine(
+                    filename: filename, prompt: prompt, imageJPEG: jpeg, note: note)
+                subtitle = refined.summary
+                currentFilename = refined.filename
+                try await show(path: refined.url, name: refined.filename)
+                refineNote = ""
+                await refreshLibrary()
+            } catch APIError.badStatus(404, _) {
+                // The endpoint is not built yet. Say so plainly rather than
+                // showing a bare 404.
+                errorMessage = "The backend has no /refine endpoint yet."
+            } catch {
+                await report(error)
+            }
+            isRefining = false
         }
     }
 

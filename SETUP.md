@@ -25,6 +25,13 @@ fails with an ATS error, add `App Transport Security Settings` →
     GET  /models    -> [{name, format, size, created, url, prompt, public_url}]
     GET  /health    -> {"status": "ok"}
 
+    POST /refine    {"filename": "...usda",       which model this is a view of
+                     "prompt":   "a wooden chair", what it was asked to be
+                     "image_b64": "...",           JPEG of the AR view
+                     "note":     "legs too thin",  optional, may be ""
+                     "format":   "usda"}
+                    -> the same shape /model3d returns
+
 `Models.swift` is the only coupling. Change it and the backend's schema
 together, or neither.
 
@@ -60,3 +67,23 @@ present is not a promise that it still resolves.
 - The returned URL serves a file beginning `#usda`, 19 meshes, and renders
   through Apple's own USD stack
 - `GET /models` lists it, correctly typed as `usda`
+
+
+## 8. Improving a model from the room
+
+The viewer has a camera button that snapshots the AR view — the model
+composited into the real scene — and posts it to `/refine`.
+
+That frame carries something a server-side render cannot have: the model at
+true scale beside real objects, seen from a human standing height. "The legs
+are too thin" is a judgement you can only make looking at a chair next to an
+actual chair.
+
+The response is the same shape as `/model3d`, so a refined model simply
+replaces the current one. Until the endpoint exists the button returns a
+plain "no /refine endpoint yet" rather than a bare 404.
+
+Only models that came from the backend can be refined — a pasted URL has no
+filename the backend would recognise, so the button is disabled for those.
+The SwiftUI overlay is a sibling view of the AR view, so the controls stay
+out of the captured frame.
