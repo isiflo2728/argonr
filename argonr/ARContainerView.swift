@@ -16,16 +16,16 @@ import ARKit
 
 struct ARContainerView: UIViewRepresentable {
     var modelURL: URL?
-    /// Longest side the result is scaled to, and how big a surface it demands.
-    /// A desk scene needs real floor; a single mug does not.
-    var kind: CaptureKind
     /// Bumped to ask for a snapshot. A counter rather than a flag, so two
     /// captures in a row both fire.
     var captureTicket: Int
     var onNote: (String) -> Void
     var onCapture: (UIImage) -> Void
+    /// Longest side of the placed model, in metres, so the UI can show the
+    /// size the user is actually looking at.
+    var onSize: (Float) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(onNote: onNote, onCapture: onCapture) }
+    func makeCoordinator() -> Coordinator { Coordinator(onNote: onNote, onCapture: onCapture, onSize: onSize) }
 
     func makeUIView(context: Context) -> ARView {
         let view = ARView(frame: .zero)
@@ -52,18 +52,16 @@ struct ARContainerView: UIViewRepresentable {
             coaching.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
 
-        // Demand a surface proportional to what we are about to place, or a
-        // 0.8 m scene latches onto a laptop lid.
-        let minimum = kind.minimumPlaneMeters
+        // A real surface rather than the first 15cm ledge in view. The model
+        // can be dragged elsewhere afterwards.
         let anchor = AnchorEntity(.plane(.horizontal,
                                          classification: .any,
-                                         minimumBounds: [minimum, minimum]))
+                                         minimumBounds: [0.2, 0.2]))
         view.scene.addAnchor(anchor)
 
         context.coordinator.arView = view
         context.coordinator.anchor = anchor
         context.coordinator.coaching = coaching
-        context.coordinator.fitMeters = kind.fitMeters
         context.coordinator.load(modelURL)
         return view
     }
@@ -71,7 +69,7 @@ struct ARContainerView: UIViewRepresentable {
     func updateUIView(_ uiView: ARView, context: Context) {
         context.coordinator.onNote = onNote
         context.coordinator.onCapture = onCapture
-        context.coordinator.fitMeters = kind.fitMeters
+        context.coordinator.onSize = onSize
         context.coordinator.load(modelURL)
         context.coordinator.captureIfAsked(captureTicket)
     }
@@ -87,7 +85,7 @@ struct ARContainerView: UIViewRepresentable {
         var coaching: ARCoachingOverlayView?
         var onNote: (String) -> Void
         var onCapture: (UIImage) -> Void
-        var fitMeters: Float = 0.3
+        var onSize: (Float) -> Void
         private var servedTicket = 0
 
         private var currentURL: URL?
@@ -95,9 +93,11 @@ struct ARContainerView: UIViewRepresentable {
         private var task: Task<Void, Never>?
 
         init(onNote: @escaping (String) -> Void,
-             onCapture: @escaping (UIImage) -> Void) {
+             onCapture: @escaping (UIImage) -> Void,
+             onSize: @escaping (Float) -> Void) {
             self.onNote = onNote
             self.onCapture = onCapture
+            self.onSize = onSize
             super.init()
         }
 
@@ -135,14 +135,18 @@ struct ARContainerView: UIViewRepresentable {
                     // gestures. Parent it to a ModelEntity so it can.
                     let wrapper = ModelEntity()
                     wrapper.addChild(entity)
-                    Self.fit(entity, longestSide: self.fitMeters)
+                    let metres = Self.placeAtTrueScale(entity)
                     wrapper.generateCollisionShapes(recursive: true)
 
                     self.host?.removeFromParent()
                     anchor.addChild(wrapper)
                     self.host = wrapper
 
-                    self.arView?.installGestures([.rotation, .scale], for: wrapper)
+                    // Translation lets the model be dragged onto whatever
+                    // surface the user actually wants it on.
+                    self.arView?.installGestures([.translation, .rotation, .scale],
+                                                 for: wrapper)
+                    self.onSize(metres)
                     self.onNote("")
                 } catch {
                     self.onNote("Couldn't load that model — \(error.localizedDescription)")
@@ -150,13 +154,34 @@ struct ARContainerView: UIViewRepresentable {
             }
         }
 
-        /// Generated models come out at wildly different scales. Normalize so
-        /// the result lands at a believable size wherever it is placed.
-        private static func fit(_ entity: Entity, longestSide: Float) {
+        /// Places the model at the size it says it is.
+        ///
+        /// USD here is metres with `metersPerUnit = 1`, and the backend builds
+        /// to real-world scale, so the file already knows how big the thing
+        /// should be. Normalising to a fixed size — which this used to do —
+        /// silently discarded every size correction the backend made, so the
+        /// refinement loop could never converge: it was always judging an
+        /// object the app had resized behind its back.
+        ///
+        /// Only absurd values are clamped, so a model that comes back as a
+        /// forty metre chair is still reachable rather than filling the room.
+        @discardableResult
+        private static func placeAtTrueScale(_ entity: Entity) -> Float {
             let extents = entity.visualBounds(relativeTo: nil).extents
             let longest = max(extents.x, max(extents.y, extents.z))
-            guard longest > 0.0001 else { return }
-            entity.scale = .init(repeating: longestSide / longest)
+            guard longest > 0.0001 else { return 0 }
+
+            let limit: Float = 2.5          // taller than a person: clamp
+            let floor: Float = 0.02         // smaller than a coin: clamp
+            if longest > limit {
+                entity.scale = .init(repeating: limit / longest)
+                return limit
+            }
+            if longest < floor {
+                entity.scale = .init(repeating: floor / longest)
+                return floor
+            }
+            return longest
         }
 
         // MARK: - ARCoachingOverlayViewDelegate

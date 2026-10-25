@@ -52,6 +52,16 @@ final class AppModel {
     var assessment: String?
     var changes: [String] = []
     var scaleNote: String?
+    /// Longest side of what is actually on the table, in metres. Shown so a
+    /// size correction is visible rather than merely claimed.
+    var sizeMetres: Float?
+
+    var sizeText: String? {
+        guard let sizeMetres else { return nil }
+        return sizeMetres < 1
+            ? "\(Int((sizeMetres * 100).rounded())) cm"
+            : String(format: "%.2f m", sizeMetres)
+    }
     /// Identifies the model being refined, and what it was asked to be.
     private var currentFilename = ""
     private var currentPrompt = ""
@@ -166,6 +176,10 @@ final class AppModel {
             }
             isFetching = false
         }
+    }
+
+    func observe(sizeMetres metres: Float) {
+        sizeMetres = metres > 0 ? metres : nil
     }
 
     // MARK: - Refine

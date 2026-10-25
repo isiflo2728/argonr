@@ -18,16 +18,16 @@ struct ViewerScreen: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             ARContainerView(modelURL: app.modelURL,
-                            kind: .object,
                             captureTicket: app.captureTicket,
                             onNote: { note = $0 },
-                            onCapture: app.receive(shot:))
+                            onCapture: app.receive(shot:),
+                            onSize: app.observe(sizeMetres:))
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 topBar
                 Spacer()
-                if !note.isEmpty { noteBubble }
+                noteBubble
                 bottomBar
             }
 
@@ -36,6 +36,7 @@ struct ViewerScreen: View {
         .animation(motion, value: note)
         .animation(motion, value: app.isRefining)
         .animation(motion, value: app.assessment)
+        .animation(motion, value: app.sizeMetres)
     }
 
     private var motion: Animation? { reduceMotion ? nil : .snappy }
@@ -46,12 +47,20 @@ struct ViewerScreen: View {
                 Text(app.title)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(2)
-                if !app.subtitle.isEmpty {
-                    Text(app.subtitle)
-                        .font(.caption)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    if let size = app.sizeText {
+                        Text(size)
+                            .monospacedDigit()
+                            .contentTransition(.numericText())
+                            .foregroundStyle(.primary)
+                    }
+                    if !app.subtitle.isEmpty {
+                        Text(app.subtitle)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .font(.caption)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -175,7 +184,7 @@ struct ViewerScreen: View {
     }
 
     private var noteBubble: some View {
-        Text(note)
+        Text(note.isEmpty ? "Drag to move · pinch to resize · twist to turn" : note)
             .font(.caption)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
