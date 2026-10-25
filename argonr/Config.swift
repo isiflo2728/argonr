@@ -10,7 +10,10 @@ import Foundation
 
 enum Config {
     private static let key = "argonr.serverBase"
-    static let fallback = "https://argonr-backend-641066446400.us-central1.run.app"
+    // This laptop. The deployed backend does not have /world yet — point
+    // Settings at https://argonr-backend-641066446400.us-central1.run.app
+    // once the world endpoints are merged and redeployed.
+    static let fallback = "http://10.1.63.55:8010"
 
     /// The deployed backend. Override in Settings to point at a laptop
     /// running `uvicorn app.main:app` — find its address with
@@ -21,7 +24,7 @@ enum Config {
     /// network failure rather than a wrong setting.
     private static let stale = ["http://192.168.1.100:8787",
                                 "http://192.168.1.100:8000",
-                                "http://10.1.63.55:8010"]
+                                "https://argonr-backend-641066446400.us-central1.run.app"]
 
     static var serverBase: String {
         get {
