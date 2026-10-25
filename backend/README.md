@@ -81,29 +81,24 @@ the key outside the repo — this repo is public.
 
 ## Deploy (Cloud Run)
 
-Runs as the `argon-uploader` service account, so no key file is needed. The
-Gemini key comes from Secret Manager. With uploads on, `/models` lists the
-bucket rather than local disk, which Cloud Run wipes on every restart.
+Runs as the `argon-uploader` service account, so no key file is needed. With
+uploads on, `/models` lists the bucket rather than local disk, which Cloud Run
+wipes on every restart.
 
-    ./deploy.sh              # build, deploy, smoke test
-    SKIP_BUILD=1 ./deploy.sh # redeploy the last image, e.g. after changing settings
+    ./deploy.sh                          # build, deploy, smoke test
+    SKIP_BUILD=1 ./deploy.sh             # redeploy the last image, e.g. after changing settings
+    ENV_FILE=~/other/.env ./deploy.sh    # read the Gemini key from another file
 
-It checks the prerequisites below first and prints the command to fix any
-that are missing. Settings (`PROJECT`, `BUCKET`, `MAX_INSTANCES`, ...) can be
-overridden from the environment. What it runs, if you'd rather do it by hand:
+**The Gemini key** is read at deploy time from `$GEMINI_API_KEY`, or else from
+`GEMINI_API_KEY=` in `.env` (gitignored), and set as a Cloud Run environment
+variable. Never write the key into `deploy.sh` — this repo is public. Anyone
+with Viewer access to the Cloud Run service in the console can see it.
 
-    P=printbot-f7f6d R=us-central1
-    gcloud builds submit --project=$P --region=$R --tag $R-docker.pkg.dev/$P/argonr/backend:latest .
-    gcloud run deploy argonr-backend --project=$P --region=$R \
-      --image=$R-docker.pkg.dev/$P/argonr/backend:latest \
-      --service-account=argon-uploader@$P.iam.gserviceaccount.com \
-      --set-secrets=GEMINI_API_KEY=gemini-api-key:latest \
-      --set-env-vars=GCS_BUCKET=argon-hackathon-models-383c2c,GCS_PUBLIC_URLS=true,GEMINI_MODEL=gemini-4-argon \
-      --allow-unauthenticated --timeout=300 --min-instances=1 --max-instances=3 --cpu-boost --memory=512Mi
+Other settings (`PROJECT`, `BUCKET`, `MIN_INSTANCES`, `MAX_INSTANCES`, ...) can
+be overridden from the environment.
 
-One-time setup: the `gemini-api-key` secret must exist, and the service account
-needs **Secret Manager Secret Accessor** on it plus **Storage Object Creator**
-and **Storage Object Viewer** on the bucket.
+One-time setup: the service account needs **Storage Object Creator** and
+**Storage Object Viewer** on the bucket.
 
 `--min-instances=1` keeps one instance warm so requests never hit a cold
 start. That instance is billed while idle, so run

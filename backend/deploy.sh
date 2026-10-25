@@ -6,17 +6,19 @@
 #
 # Every setting can be overridden from the environment, e.g.
 #   PROJECT=my-project BUCKET=my-bucket ./deploy.sh
+#   ENV_FILE=~/elsewhere/.env ./deploy.sh
 #
-# Prerequisites (one-time, see README "Deploy"): the Gemini secret exists and
-# the service account can read it and write to the bucket. This script checks
-# them but never creates or reads secrets.
+# The Gemini key is read at deploy time from $GEMINI_API_KEY, or else from
+# GEMINI_API_KEY=... in $ENV_FILE (default: .env, which is gitignored), and set
+# as a Cloud Run environment variable. Never put the key in this file: the repo
+# is public.
 set -euo pipefail
 
 PROJECT="${PROJECT:-printbot-f7f6d}"
 REGION="${REGION:-us-central1}"
 SERVICE="${SERVICE:-argonr-backend}"
 BUCKET="${BUCKET:-argon-hackathon-models-383c2c}"
-SECRET="${SECRET:-gemini-api-key}"
+ENV_FILE="${ENV_FILE:-.env}"
 SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-argon-uploader@${PROJECT}.iam.gserviceaccount.com}"
 GEMINI_MODEL="${GEMINI_MODEL:-gemini-4-argon}"
 # One instance stays warm so the first request doesn't wait for a cold start.
@@ -36,14 +38,29 @@ step() { printf '\n==> %s\n' "$*"; }
 fail() { printf '\nError: %s\n' "$*" >&2; exit 1; }
 
 step "Checking prerequisites in $PROJECT"
-gc secrets describe "$SECRET" >/dev/null 2>&1 \
-  || fail "secret '$SECRET' does not exist. Create it once with:
-  grep '^GEMINI_API_KEY=' .env | cut -d= -f2- | tr -d '\\n' | gcloud secrets create $SECRET --project=$PROJECT --replication-policy=automatic --data-file=-"
-gc secrets get-iam-policy "$SECRET" --format=json | grep -q "serviceAccount:$SERVICE_ACCOUNT" \
-  || fail "$SERVICE_ACCOUNT cannot read '$SECRET'. Grant it with:
-  gcloud secrets add-iam-policy-binding $SECRET --project=$PROJECT --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/secretmanager.secretAccessor"
+# Parse rather than `source` the file, so nothing in it gets executed.
+if [[ -z "${GEMINI_API_KEY:-}" && -f "$ENV_FILE" ]]; then
+  GEMINI_API_KEY="$(grep -E '^GEMINI_API_KEY=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '\r' | sed -E 's/^["'"'"']|["'"'"']$//g')"
+fi
+[[ -n "${GEMINI_API_KEY:-}" ]] \
+  || fail "no Gemini key. Set GEMINI_API_KEY, or put GEMINI_API_KEY=... in $ENV_FILE (or point ENV_FILE at a file that has it)"
+# Keys are tokens like "AIza..." or "AQ.Ab8..."; anything with spaces, quotes or
+# backslashes is a mangled value and would also break the YAML below.
+[[ "$GEMINI_API_KEY" =~ ^[A-Za-z0-9._~+/=-]+$ ]] || fail "GEMINI_API_KEY in $ENV_FILE doesn't look like an API key"
 gc storage buckets describe "gs://$BUCKET" >/dev/null 2>&1 || fail "bucket gs://$BUCKET not found"
-echo "secret, access and bucket OK"
+echo "Gemini key found (${#GEMINI_API_KEY} chars), bucket OK"
+
+# Pass settings through a private temp file rather than --set-env-vars, so the
+# key never appears on the command line or in the process list.
+ENV_VARS_FILE="$(mktemp)"
+trap 'rm -f "$ENV_VARS_FILE"' EXIT
+chmod 600 "$ENV_VARS_FILE"
+cat > "$ENV_VARS_FILE" <<YAML
+GEMINI_API_KEY: "$GEMINI_API_KEY"
+GEMINI_MODEL: "$GEMINI_MODEL"
+GCS_BUCKET: "$BUCKET"
+GCS_PUBLIC_URLS: "true"
+YAML
 
 if [[ -z "${SKIP_BUILD:-}" ]]; then
   step "Building $IMAGE"
@@ -55,8 +72,7 @@ gc run deploy "$SERVICE" \
   --region="$REGION" \
   --image="$IMAGE" \
   --service-account="$SERVICE_ACCOUNT" \
-  --set-secrets="GEMINI_API_KEY=${SECRET}:latest" \
-  --set-env-vars="GCS_BUCKET=${BUCKET},GCS_PUBLIC_URLS=true,GEMINI_MODEL=${GEMINI_MODEL}" \
+  --env-vars-file="$ENV_VARS_FILE" \
   --allow-unauthenticated \
   --timeout=300 \
   --min-instances="$MIN_INSTANCES" \
