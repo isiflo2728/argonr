@@ -55,6 +55,9 @@ final class AppModel {
     /// Longest side of what is actually on the table, in metres. Shown so a
     /// size correction is visible rather than merely claimed.
     var sizeMetres: Float?
+    /// Files the user can take away: the USD, and the backend's original
+    /// where there is one.
+    var exportable: [URL] = []
 
     var sizeText: String? {
         guard let sizeMetres else { return nil }
@@ -226,7 +229,9 @@ final class AppModel {
     // MARK: - Shared
 
     private func show(path: String, name: String) async throws {
-        modelURL = try await APIClient.shared.downloadModel(path: path, name: name)
+        let files = try await APIClient.shared.downloadModel(path: path, name: name)
+        modelURL = files.usd
+        exportable = [files.usd] + (files.original.map { [$0] } ?? [])
         phase = .viewing
     }
 
@@ -242,6 +247,8 @@ final class AppModel {
         subtitle = ""
         arNote = ""
         errorMessage = nil
+        exportable = []
+        sizeMetres = nil
         clearAssessment()
         phase = .load
     }

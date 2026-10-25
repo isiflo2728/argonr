@@ -14,6 +14,7 @@ struct ViewerScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var note = ""
     @FocusState private var noteFocused: Bool
+    @State private var showShare = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -37,6 +38,7 @@ struct ViewerScreen: View {
         .animation(motion, value: app.isRefining)
         .animation(motion, value: app.assessment)
         .animation(motion, value: app.sizeMetres)
+        .sheet(isPresented: $showShare) { ShareSheet(items: app.exportable) }
     }
 
     private var motion: Animation? { reduceMotion ? nil : .snappy }
@@ -67,6 +69,17 @@ struct ViewerScreen: View {
             .background(.ultraThinMaterial, in: .rect(cornerRadius: 10))
 
             Spacer()
+
+            if !app.exportable.isEmpty {
+                Button("Export asset", systemImage: "square.and.arrow.up") {
+                    showShare = true
+                }
+                .labelStyle(.iconOnly)
+                .font(.footnote.weight(.semibold))
+                .frame(width: 44, height: 44)
+                .background(.ultraThinMaterial, in: .circle)
+                .buttonStyle(.plain)
+            }
 
             Button("Back", systemImage: "xmark", action: app.startOver)
                 .labelStyle(.iconOnly)

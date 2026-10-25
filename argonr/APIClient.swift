@@ -114,7 +114,17 @@ struct APIClient {
     /// it. The URL is not trusted to carry one — signed cloud links end in a
     /// query string and object keys often have no extension — so the format is
     /// sniffed from the bytes, which cannot lie.
-    func downloadModel(path: String, name: String) async throws -> URL {
+    /// Both files: the USD the viewer needs, and the original the backend
+    /// sent. The original is kept because that is the one other tools want —
+    /// GLB opens in Blender, Unity and Quick Look, and an asset you cannot
+    /// take out of the app is not really an asset.
+    struct Downloaded {
+        let usd: URL
+        let original: URL?
+        var originalFormat: String { original?.pathExtension.uppercased() ?? "" }
+    }
+
+    func downloadModel(path: String, name: String) async throws -> Downloaded {
         guard let url = URL(string: path, relativeTo: Config.baseURL) else { throw APIError.badURL }
 
         let (temp, response) = try await session.download(from: url)
@@ -127,22 +137,31 @@ struct APIClient {
         // converted here — which keeps the app working against the deployed
         // backend with nothing else running. USD passes straight through, so
         // this costs nothing once the backend's USD exporter ships.
+        let base = FileManager.default.temporaryDirectory
+        let stem = (name as NSString).deletingPathExtension
+
         let dest: URL
         let payload: Data
+        var original: URL?
+
         if GLBConverter.isGLTF(data) {
-            dest = FileManager.default.temporaryDirectory
-                .appendingPathComponent("\(name).usda")
+            dest = base.appendingPathComponent("\(stem).usda")
             payload = Data(try GLBConverter.usda(from: data).utf8)
+
+            // Keep what the backend actually sent, for export.
+            let kept = base.appendingPathComponent("\(stem).glb")
+            try? FileManager.default.removeItem(at: kept)
+            try? data.write(to: kept)
+            original = FileManager.default.fileExists(atPath: kept.path) ? kept : nil
         } else {
             let suffix = try Self.usdExtension(of: data, urlHint: url.pathExtension)
-            dest = FileManager.default.temporaryDirectory
-                .appendingPathComponent("\(name).\(suffix)")
+            dest = base.appendingPathComponent("\(stem).\(suffix)")
             payload = data
         }
 
         try? FileManager.default.removeItem(at: dest)
         try payload.write(to: dest)
-        return dest
+        return Downloaded(usd: dest, original: original)
     }
 
     static func usdExtension(of data: Data, urlHint: String) throws -> String {

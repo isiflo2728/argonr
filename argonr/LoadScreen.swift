@@ -13,8 +13,18 @@ struct LoadScreen: View {
     @FocusState private var promptFocused: Bool
     @State private var showAdvanced = false
 
-    private let examples = ["a wooden chair", "a red fire hydrant",
-                            "a low-poly treasure chest", "a ceramic teapot"]
+    /// Spread across categories on purpose: four chairs made an open-ended
+    /// tool look like a furniture catalogue.
+    private let examples = [
+        "a red fire hydrant",
+        "a low-poly treasure chest",
+        "a potted monstera",
+        "a yellow school bus",
+        "a stack of pancakes with butter",
+        "a desk lamp, brushed steel",
+        "a wizard's staff with a blue crystal",
+        "a vintage rotary telephone",
+    ]
 
     var body: some View {
         ScrollView {
@@ -43,7 +53,7 @@ struct LoadScreen: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("argonr")
                 .font(.largeTitle.weight(.semibold))
-            Text("Describe an object. It gets built, then placed on a real surface in front of you.")
+            Text("Describe anything. It gets built, placed on a real surface at its true size, and you can take the file away.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -85,7 +95,8 @@ struct LoadScreen: View {
 
     private var buildSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TextField("a wooden chair", text: $app.prompt, axis: .vertical)
+            TextField("anything — an object, a creature, a vehicle",
+                      text: $app.prompt, axis: .vertical)
                 .lineLimit(2...4)
                 .textFieldStyle(.plain)
                 .font(.title3)
