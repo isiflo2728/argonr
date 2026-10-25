@@ -20,6 +20,7 @@ struct LoadScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 header
+                connectionRow
                 buildSection
                 if !app.library.isEmpty { librarySection }
                 advancedSection
@@ -46,6 +47,38 @@ struct LoadScreen: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var connectionRow: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(app.isReachable == true ? AnyShapeStyle(.green)
+                      : app.isReachable == false ? AnyShapeStyle(.orange)
+                      : AnyShapeStyle(.tertiary))
+                .frame(width: 8, height: 8)
+
+            Text(app.serverBase)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer()
+
+            Button(showAdvanced ? "Done" : "Change") {
+                showAdvanced.toggle()
+            }
+            .font(.caption)
+            .buttonStyle(.plain)
+            .foregroundStyle(.tint)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(.secondarySystemBackground), in: .capsule)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Backend \(app.serverBase), "
+                            + (app.isReachable == true ? "reachable"
+                               : app.isReachable == false ? "not reachable" : "not checked"))
     }
 
     // MARK: - Build
@@ -152,13 +185,6 @@ struct LoadScreen: View {
 
     private var advancedSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Button(showAdvanced ? "Hide settings" : "Settings") {
-                showAdvanced.toggle()
-            }
-            .font(.footnote)
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-
             if showAdvanced {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Backend")
@@ -174,6 +200,7 @@ struct LoadScreen: View {
                         .padding(12)
                         .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 10))
                         .accessibilityLabel("Backend address")
+                        .onSubmit(app.recheck)
 
                     Text("Or open a model URL directly")
                         .font(.footnote.weight(.semibold))

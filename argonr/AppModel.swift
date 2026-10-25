@@ -26,6 +26,8 @@ final class AppModel {
     // Library
     var library: [LibraryModel] = []
     var isLoadingLibrary = false
+    /// nil until checked. Drives the dot next to the address.
+    var isReachable: Bool?
 
     // Session
     var modelURL: URL?
@@ -78,12 +80,24 @@ final class AppModel {
         Config.serverBase = serverBase.trimmingCharacters(in: .whitespacesAndNewlines)
         isLoadingLibrary = true
         defer { isLoadingLibrary = false }
+
+        // Check reachability first: it is a 5s timeout rather than the 300s
+        // one a build needs, so a wrong address fails fast and visibly.
+        isReachable = await APIClient.shared.isReachable()
+        guard isReachable == true else {
+            library = []
+            return
+        }
         do {
             library = try await APIClient.shared.library()
         } catch {
-            // A missing library is not worth an alert; building still works.
             library = []
         }
+    }
+
+    /// Re-check after the address is edited.
+    func recheck() {
+        Task { await refreshLibrary() }
     }
 
     func open(_ model: LibraryModel) {
