@@ -209,7 +209,18 @@ final class AppModel {
 
                 await downloadNewModels(job: job)
 
-                if snapshot.done { break }
+                if snapshot.done {
+                    // A job can finish having produced no model at all — most
+                    // often because Blender is missing on the laptop. Say so
+                    // instead of parking on the progress screen forever.
+                    if modelURLs.isEmpty {
+                        errorMessage = iterations.isEmpty
+                            ? "The laptop finished without building anything. Is the loop server running?"
+                            : "The loop ran but exported no model. Is Blender installed on the laptop?"
+                        phase = .capture
+                    }
+                    break
+                }
             } catch {
                 // A dropped poll on venue wifi is not fatal — keep trying.
                 loaderNote = error.localizedDescription

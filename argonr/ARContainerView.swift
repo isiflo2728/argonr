@@ -2,9 +2,12 @@
 //  ARContainerView.swift
 //  argonr
 //
-//  Drops the current .usdz onto the first horizontal plane it finds and
-//  swaps it in place when you pick a different iteration. The swap is the
-//  demo: tap v0, tap v5, watch it correct itself on the table.
+//  Drops the current .usdz onto a horizontal plane and swaps it in place when
+//  you pick a different iteration. The swap is the demo: tap v0, tap v5, and
+//  watch it correct itself in front of you.
+//
+//  ARKit appears only here. Capture is an ordinary video; the loop runs
+//  against headless renders server-side. AR is purely how you see the result.
 //
 
 import SwiftUI
@@ -13,9 +16,9 @@ import ARKit
 
 struct ARContainerView: UIViewRepresentable {
     var modelURL: URL?
-    /// Longest side the result is scaled to. A desk scene needs more room
-    /// than a single mug, so the capture kind decides this.
-    var fitMeters: Float
+    /// Longest side the result is scaled to, and how big a surface it demands.
+    /// A desk scene needs real floor; a single mug does not.
+    var kind: CaptureKind
     var onNote: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(onNote: onNote) }
@@ -28,22 +31,42 @@ struct ARContainerView: UIViewRepresentable {
         config.environmentTexturing = .automatic
         view.session.run(config)
 
-        // Waits for a surface roughly the size of a sheet of paper.
+        // Without this the session starts cold and nothing happens for several
+        // seconds, which reads as a broken app. Apple's overlay says "move
+        // your phone to find a surface" and gets out of the way on its own.
+        let coaching = ARCoachingOverlayView()
+        coaching.session = view.session
+        coaching.goal = .horizontalPlane
+        coaching.activatesAutomatically = true
+        coaching.delegate = context.coordinator
+        coaching.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(coaching)
+        NSLayoutConstraint.activate([
+            coaching.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            coaching.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            coaching.topAnchor.constraint(equalTo: view.topAnchor),
+            coaching.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+
+        // Demand a surface proportional to what we are about to place, or a
+        // 0.8 m scene latches onto a laptop lid.
+        let minimum = kind.minimumPlaneMeters
         let anchor = AnchorEntity(.plane(.horizontal,
                                          classification: .any,
-                                         minimumBounds: [0.15, 0.15]))
+                                         minimumBounds: [minimum, minimum]))
         view.scene.addAnchor(anchor)
 
         context.coordinator.arView = view
         context.coordinator.anchor = anchor
-        context.coordinator.fitMeters = fitMeters
+        context.coordinator.coaching = coaching
+        context.coordinator.fitMeters = kind.fitMeters
         context.coordinator.load(modelURL)
         return view
     }
 
     func updateUIView(_ uiView: ARView, context: Context) {
         context.coordinator.onNote = onNote
-        context.coordinator.fitMeters = fitMeters
+        context.coordinator.fitMeters = kind.fitMeters
         context.coordinator.load(modelURL)
     }
 
@@ -52,9 +75,10 @@ struct ARContainerView: UIViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator {
+    final class Coordinator: NSObject, ARCoachingOverlayViewDelegate {
         var arView: ARView?
         var anchor: AnchorEntity?
+        var coaching: ARCoachingOverlayView?
         var onNote: (String) -> Void
         var fitMeters: Float = 0.3
 
@@ -64,6 +88,7 @@ struct ARContainerView: UIViewRepresentable {
 
         init(onNote: @escaping (String) -> Void) {
             self.onNote = onNote
+            super.init()
         }
 
         func load(_ url: URL?) {
@@ -77,14 +102,14 @@ struct ARContainerView: UIViewRepresentable {
                 return
             }
 
-            onNote("Loading…")
+            onNote("Loading")
             task = Task { @MainActor [weak self] in
                 guard let self else { return }
                 do {
                     let entity = try await Entity(contentsOf: url)
                     guard !Task.isCancelled else { return }
 
-                    // A usdz root is usually a plain Entity, which can't take
+                    // A usdz root is usually a plain Entity, which cannot take
                     // gestures. Parent it to a ModelEntity so it can.
                     let wrapper = ModelEntity()
                     wrapper.addChild(entity)
@@ -104,12 +129,18 @@ struct ARContainerView: UIViewRepresentable {
         }
 
         /// Generated models come out at wildly different scales. Normalize so
-        /// everything lands about hand-sized on the table.
+        /// the result lands at a believable size wherever it is placed.
         private static func fit(_ entity: Entity, longestSide: Float) {
             let extents = entity.visualBounds(relativeTo: nil).extents
             let longest = max(extents.x, max(extents.y, extents.z))
             guard longest > 0.0001 else { return }
             entity.scale = .init(repeating: longestSide / longest)
+        }
+
+        // MARK: - ARCoachingOverlayViewDelegate
+
+        func coachingOverlayViewWillActivate(_ overlay: ARCoachingOverlayView) {
+            onNote("")
         }
     }
 }

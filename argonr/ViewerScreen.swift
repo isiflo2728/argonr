@@ -22,7 +22,7 @@ struct ViewerScreen: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             ARContainerView(modelURL: app.selectedModelURL,
-                            fitMeters: app.kind.fitMeters) { note in
+                            kind: app.kind) { note in
                 arNote = note
             }
             .ignoresSafeArea()

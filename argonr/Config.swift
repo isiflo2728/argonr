@@ -39,6 +39,15 @@ enum CaptureKind {
         }
     }
 
+    /// Smallest surface the anchor will settle on. Proportional to what is
+    /// being placed — otherwise a desk scene lands on a laptop lid.
+    var minimumPlaneMeters: Float {
+        switch self {
+        case .object: 0.15
+        case .scene:  0.5
+        }
+    }
+
     var serverValue: String {
         switch self {
         case .object: "object"
