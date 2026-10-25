@@ -2,11 +2,6 @@
 //  LoadScreen.swift
 //  argonr
 //
-//  Two ways in, because the backend may not be reachable when you need to
-//  demo. Pasting a URL always works — if a model exists anywhere on the
-//  network, it renders. Connecting to a job additionally gets you versions
-//  and the ability to ask for changes.
-//
 //  Spacing grid: 4 / 8 / 12 / 16 / 20 / 24 / 32. Card radius: 10.
 //
 
@@ -15,16 +10,19 @@ import SwiftUI
 struct LoadScreen: View {
     @Bindable var app: AppModel
 
-    @FocusState private var focus: Field?
-    private enum Field { case url, job, server }
+    @FocusState private var promptFocused: Bool
+    @State private var showAdvanced = false
+
+    private let examples = ["a wooden chair", "a red fire hydrant",
+                            "a low-poly treasure chest", "a ceramic teapot"]
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 header
-                directSection
-                orDivider
-                jobSection
+                buildSection
+                if !app.library.isEmpty { librarySection }
+                advancedSection
 
                 if let error = app.errorMessage {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -36,109 +34,168 @@ struct LoadScreen: View {
             .padding(.vertical, 24)
         }
         .scrollDismissesKeyboard(.interactively)
+        .task { await app.refreshLibrary() }
+        .refreshable { await app.refreshLibrary() }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("argonr")
                 .font(.largeTitle.weight(.semibold))
-            Text("Put a generated scene on the table in front of you, then say what should change.")
+            Text("Describe an object. It gets built, then placed on a real surface in front of you.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
     }
 
-    // MARK: - Paste a URL
+    // MARK: - Build
 
-    private var directSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Model URL")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            TextField("https://storage.googleapis.com/…/scene.usda", text: $app.directURL)
+    private var buildSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TextField("a wooden chair", text: $app.prompt, axis: .vertical)
+                .lineLimit(2...4)
                 .textFieldStyle(.plain)
-                .font(.caption.monospaced())
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                .focused($focus, equals: .url)
-                .padding(12)
+                .font(.title3)
+                .focused($promptFocused)
+                .padding(16)
                 .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 10))
-                .accessibilityLabel("Model URL")
+                .accessibilityLabel("What to build")
 
-            Text("USD only — .usda, .usdc or .usdz.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(examples, id: \.self) { example in
+                        Button(example) {
+                            app.prompt = example
+                            promptFocused = false
+                        }
+                        .font(.footnote)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color(.secondarySystemBackground), in: .capsule)
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
 
-            Button {
-                focus = nil
-                app.openDirect()
-            } label: {
-                Text(app.isWorking ? "Loading" : "Open in AR")
+            Button(action: buildTapped) {
+                Text(app.isBuilding ? "Building" : "Build it")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!app.canOpenDirect)
-        }
-    }
+            .disabled(!app.canBuild)
 
-    private var orDivider: some View {
-        HStack(spacing: 12) {
-            Rectangle().fill(.separator).frame(height: 1)
-            Text("or")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-            Rectangle().fill(.separator).frame(height: 1)
-        }
-    }
-
-    // MARK: - Attach to a job
-
-    private var jobSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Job on the laptop")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            TextField("job id", text: $app.jobIdInput)
-                .textFieldStyle(.plain)
-                .font(.caption.monospaced())
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($focus, equals: .job)
-                .padding(12)
-                .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 10))
-                .accessibilityLabel("Job identifier")
-
-            TextField(Config.fallback, text: $app.serverBase)
-                .textFieldStyle(.plain)
-                .font(.caption.monospaced())
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                .focused($focus, equals: .server)
-                .padding(12)
-                .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 10))
-                .accessibilityLabel("Server address")
-
-            Text("Gets you every version and the ability to ask for changes.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-
-            Button {
-                focus = nil
-                app.attachToJob()
-            } label: {
-                Text("Attach")
-                    .font(.headline)
+            if app.isBuilding {
+                Text("Argon is modelling it. Up to a minute.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
             }
-            .buttonStyle(.bordered)
-            .disabled(!app.canAttach)
+        }
+    }
+
+    private func buildTapped() {
+        promptFocused = false
+        app.build()
+    }
+
+    // MARK: - Library
+
+    private var librarySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Already built")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if app.isLoadingLibrary {
+                    ProgressView().controlSize(.mini)
+                }
+            }
+
+            ForEach(app.library) { model in
+                Button {
+                    app.open(model)
+                } label: {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(model.prompt ?? model.name)
+                                .font(.subheadline)
+                                .lineLimit(1)
+                            Text("\(model.format.uppercased()) · \(model.sizeText)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if model.needsConversion {
+                            // Honest rather than a surprise failure later.
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(model.needsConversion
+                                   ? "Not USD — may not load on device"
+                                   : "Places this model in AR")
+            }
+        }
+    }
+
+    // MARK: - Advanced
+
+    private var advancedSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button(showAdvanced ? "Hide settings" : "Settings") {
+                showAdvanced.toggle()
+            }
+            .font(.footnote)
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+
+            if showAdvanced {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Backend")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    TextField(Config.fallback, text: $app.serverBase)
+                        .textFieldStyle(.plain)
+                        .font(.caption.monospaced())
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .padding(12)
+                        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 10))
+                        .accessibilityLabel("Backend address")
+
+                    Text("Or open a model URL directly")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 8)
+
+                    TextField("https://…/model.usda", text: $app.directURL)
+                        .textFieldStyle(.plain)
+                        .font(.caption.monospaced())
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .padding(12)
+                        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 10))
+                        .accessibilityLabel("Model URL")
+
+                    Button("Open in AR", action: app.openDirect)
+                        .font(.footnote)
+                        .buttonStyle(.bordered)
+                        .disabled(!app.canOpenDirect)
+                }
+            }
         }
     }
 }

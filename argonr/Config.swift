@@ -10,9 +10,11 @@ import Foundation
 
 enum Config {
     private static let key = "argonr.serverBase"
-    static let fallback = "http://192.168.1.100:8787"
+    static let fallback = "http://192.168.1.100:8000"
 
-    /// Find yours with:  ipconfig getifaddr en0
+    /// The backend: locally `uvicorn app.main:app` on :8000, or the
+    /// Cloud Run URL once it is deployed.
+    /// Find your laptop's address with:  ipconfig getifaddr en0
     static var serverBase: String {
         get { UserDefaults.standard.string(forKey: key) ?? fallback }
         set { UserDefaults.standard.set(newValue, forKey: key) }

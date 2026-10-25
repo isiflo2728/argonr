@@ -2,81 +2,59 @@
 //  Models.swift
 //  argonr
 //
-//  The JSON contract with the loop server. Server speaks snake_case; the
-//  decoder converts. This file is the only coupling between the two halves —
-//  change it and the server's schema together, or neither.
+//  The JSON contract with the backend. Server speaks snake_case; the decoder
+//  converts. Change this file and the server's schema together, or neither.
 //
 
 import Foundation
 
-struct StartResponse: Decodable {
-    let jobId: String
+/// POST /model3d
+struct GenerateRequest: Encodable {
+    let prompt: String
+    /// USD is what RealityKit loads. The backend builds it from the same part
+    /// list it uses for GLB, so nothing is lost by asking for it directly.
+    let format = "usda"
 }
 
-struct JobStatus: Decodable {
-    /// generating | rendering | watching | critiquing | fixing | done | error
-    let stage: String
-    let iteration: Int
-    let totalIterations: Int
-    let done: Bool
-    let iterations: [IterationInfo]
-    let error: String?
+/// What /model3d returns.
+struct GeneratedModel: Decodable {
+    let url: String
+    let storage: String
+    let format: String
+    let filename: String
+    let parts: Int
+    let vertices: Int
+    let faces: Int
 
-    var stageLabel: String {
-        switch stage {
-        case "generating": "Modelling from your capture"
-        case "rendering":  "Rendering turntable"
-        case "watching":   "Argon is comparing to your capture"
-        case "critiquing": "Finding what is wrong"
-        case "fixing":     "Applying fixes"
-        case "done":       "Finished"
-        case "error":      "Failed"
-        default:           stage.capitalized
-        }
+    var summary: String {
+        "\(parts) parts · \(vertices) verts · \(faces) faces"
     }
 }
 
-struct IterationInfo: Decodable, Identifiable, Equatable {
-    let index: Int
-    /// Overall rubric score, 0–1.
-    let score: Double
-    /// How closely the render matches the reference, 0–1. Nil when there was
-    /// nothing to match against (a hint-only job).
-    let matchScore: Double?
-    /// For scenes: how many distinct objects the model contains. Nil for a
-    /// single-object job.
-    let objectCount: Int?
-    /// Server path, e.g. "/model/abc123/2.usdz". Nil until the export lands.
-    let modelPath: String?
-    /// One line for the history strip: "normals flipped -> fixed"
-    let headline: String?
-    let defects: [Defect]
+/// One row of GET /models.
+struct LibraryModel: Decodable, Identifiable, Equatable {
+    let name: String
+    let format: String
+    let size: Int
+    let created: String
+    /// Path on the backend, or an absolute URL.
+    let url: String
+    let prompt: String?
+    /// Set when the model was uploaded to cloud storage. Signed links expire,
+    /// so this can be present and still fail later.
+    let publicUrl: String?
 
-    var id: Int { index }
+    var id: String { name }
 
-    init(index: Int, score: Double, matchScore: Double?, objectCount: Int?,
-         modelPath: String?, headline: String?, defects: [Defect]) {
-        self.index = index
-        self.score = score
-        self.matchScore = matchScore
-        self.objectCount = objectCount
-        self.modelPath = modelPath
-        self.headline = headline
-        self.defects = defects
+    /// Prefer the uploaded copy: the backend's own disk is ephemeral.
+    var bestURL: String { publicUrl ?? url }
+
+    var isViewable: Bool { ["usda", "usdc", "usdz", "glb", "obj", "stl"].contains(format) }
+
+    /// Only USD loads on device without a conversion hop.
+    var needsConversion: Bool { !["usda", "usdc", "usdz"].contains(format) }
+
+    var sizeText: String {
+        ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
     }
-
-    static func == (a: IterationInfo, b: IterationInfo) -> Bool {
-        a.index == b.index && a.score == b.score && a.modelPath == b.modelPath
-    }
-}
-
-struct Defect: Decodable, Identifiable, Equatable {
-    let id: String
-    let rubric: String
-    let severity: String
-    let evidence: String
-    let cause: String?
-    let fix: String?
-
-    var isHigh: Bool { severity.lowercased() == "high" }
 }

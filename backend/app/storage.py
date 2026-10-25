@@ -45,7 +45,7 @@ async def save_metadata(model: Path, metadata: dict) -> None:
 
 def list_models() -> list[dict[str, str | int | None]]:
     """List saved 3D models, newest first."""
-    files = [p for p in MODELS_DIR.iterdir() if p.suffix in (".glb", ".obj", ".stl")]
+    files = [p for p in MODELS_DIR.iterdir() if p.suffix in (".glb", ".obj", ".stl", ".usda")]
     files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     models = []
     for p in files:

@@ -17,12 +17,14 @@ class MeshFormat(StrEnum):
     GLB = "glb"
     OBJ = "obj"
     STL = "stl"
+    USDA = "usda"
 
 
 MEDIA_TYPES = {
     MeshFormat.GLB: "model/gltf-binary",
     MeshFormat.OBJ: "model/obj",
     MeshFormat.STL: "model/stl",
+    MeshFormat.USDA: "model/vnd.usda",
 }
 
 
@@ -84,6 +86,8 @@ def export(scene: Scene, fmt: MeshFormat) -> bytes:
         return to_glb(scene)
     if fmt is MeshFormat.OBJ:
         return to_obj(scene).encode()
+    if fmt is MeshFormat.USDA:
+        return to_usda(scene).encode()
     return to_stl(scene).encode()
 
 
@@ -169,6 +173,54 @@ def to_glb(scene: Scene) -> bytes:
         struct.pack("<I4s", len(json_chunk), b"JSON"), json_chunk,
         struct.pack("<I4s", len(bin_chunk), b"BIN\x00"), bin_chunk,
     ])
+
+
+def to_usda(scene: Scene) -> str:
+    """USD ASCII, which Apple's RealityKit and QuickLook load directly.
+
+    A Scene is already parts with vertices, faces and a colour, which is the
+    shape USD wants, so nothing is lost on the way out. The alternative —
+    shipping GLB and converting on the client — costs a hop and drops colour
+    to whatever the converter can recover.
+
+    Faces keep their original arity rather than being triangulated: USD takes
+    arbitrary polygons, and leaving them whole keeps the file smaller and the
+    geometry closer to what the model actually described.
+    """
+    def ident(text: str, fallback: str) -> str:
+        safe = "".join(c if c.isalnum() or c == "_" else "_" for c in text).strip("_")
+        if not safe or safe[0].isdigit():
+            safe = f"{fallback}_{safe}" if safe else fallback
+        return safe
+
+    blocks = []
+    for index, part in enumerate(scene.parts):
+        points = ", ".join(f"({x:g}, {y:g}, {z:g})" for x, y, z in part.vertices)
+        counts = ", ".join(str(len(face)) for face in part.faces)
+        indices = ", ".join(str(i) for face in part.faces for i in face)
+        r, g, b = part.color
+        blocks.append(f'''
+    def Mesh "{ident(part.name, f"part{index}")}_{index}"
+    {{
+        int[] faceVertexCounts = [{counts}]
+        int[] faceVertexIndices = [{indices}]
+        point3f[] points = [{points}]
+        color3f[] primvars:displayColor = [({r:.4g}, {g:.4g}, {b:.4g})]
+        uniform token subdivisionScheme = "none"
+    }}''')
+
+    root = ident(scene.name, "Model")
+    return f'''#usda 1.0
+(
+    defaultPrim = "{root}"
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+def Xform "{root}"
+{{{"".join(blocks)}
+}}
+'''
 
 
 def to_obj(scene: Scene) -> str:
