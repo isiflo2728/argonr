@@ -244,6 +244,7 @@
 				DEVELOPMENT_TEAM = 38C5XXGVU6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Recording a clip captures audio alongside video. argonr discards the audio track before anything leaves your phone.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "argonr places your generated model on a real surface, so it needs the camera.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "argonr talks to the laptop running the generation loop on your local network.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -278,6 +279,7 @@
 				DEVELOPMENT_TEAM = 38C5XXGVU6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Recording a clip captures audio alongside video. argonr discards the audio track before anything leaves your phone.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "argonr places your generated model on a real surface, so it needs the camera.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "argonr talks to the laptop running the generation loop on your local network.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

@@ -29,23 +29,35 @@ enum MediaPrep {
     /// orbit adds latency without adding angles.
     static let maxSeconds: Double = 10
 
-    /// Trim to `maxSeconds` and re-encode at 720p.
+    /// Trim to `maxSeconds`, re-encode at 720p, and drop the audio track.
+    ///
+    /// The audio is recorded only because UIImagePickerController insists on
+    /// it in video mode — nothing downstream wants it. Stripping it here
+    /// means no audio ever leaves the device, and the upload gets smaller.
     static func compress(_ source: URL) async throws -> URL {
         let asset = AVURLAsset(url: source)
 
-        guard try await !asset.loadTracks(withMediaType: .video).isEmpty else {
+        guard let sourceTrack = try await asset.loadTracks(withMediaType: .video).first else {
             throw MediaPrepError.noVideoTrack
-        }
-
-        guard let session = AVAssetExportSession(
-            asset: asset, presetName: AVAssetExportPreset1280x720) else {
-            throw MediaPrepError.exportFailed
         }
 
         let duration = try await asset.load(.duration)
         let cap = CMTime(seconds: maxSeconds, preferredTimescale: 600)
-        session.timeRange = CMTimeRange(start: .zero,
-                                        duration: min(duration, cap))
+        let range = CMTimeRange(start: .zero, duration: min(duration, cap))
+
+        // Video-only composition: this is what drops the audio.
+        let composition = AVMutableComposition()
+        guard let videoTrack = composition.addMutableTrack(
+            withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+            throw MediaPrepError.exportFailed
+        }
+        try videoTrack.insertTimeRange(range, of: sourceTrack, at: .zero)
+        videoTrack.preferredTransform = try await sourceTrack.load(.preferredTransform)
+
+        guard let session = AVAssetExportSession(
+            asset: composition, presetName: AVAssetExportPreset1280x720) else {
+            throw MediaPrepError.exportFailed
+        }
 
         let dest = FileManager.default.temporaryDirectory
             .appendingPathComponent("reference-\(UUID().uuidString).mp4")
