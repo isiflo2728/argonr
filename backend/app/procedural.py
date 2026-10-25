@@ -60,15 +60,29 @@ Rules:
 # rather than from a user, but it is still generated text being executed, so
 # it gets a narrow surface and a timeout rather than the run of the process.
 _ALLOWED_BUILTINS = {
-    "abs": abs, "all": all, "any": any, "bool": bool, "dict": dict,
-    "divmod": divmod, "enumerate": enumerate, "filter": filter, "float": float,
-    "int": int, "len": len, "list": list, "map": map, "max": max, "min": min,
-    "pow": pow, "range": range, "reversed": reversed, "round": round,
-    "set": set, "sorted": sorted, "str": str, "sum": sum, "tuple": tuple,
-    "zip": zip, "ValueError": ValueError, "IndexError": IndexError,
-    "TypeError": TypeError, "ZeroDivisionError": ZeroDivisionError,
-    "__build_class__": __build_class__, "__name__": "generated",
+    name: __builtins__[name] if isinstance(__builtins__, dict)
+          else getattr(__builtins__, name)
+    for name in (
+        # values and arithmetic
+        "abs", "bool", "complex", "divmod", "float", "int", "pow", "round",
+        "bin", "hex", "oct", "chr", "ord", "format", "repr", "str",
+        # containers
+        "dict", "frozenset", "list", "set", "tuple", "bytes",
+        # iteration
+        "all", "any", "enumerate", "filter", "iter", "len", "map", "max",
+        "min", "next", "range", "reversed", "slice", "sorted", "sum", "zip",
+        # structure — geometry code writes helper classes and type checks
+        "isinstance", "issubclass", "type", "callable", "hash", "print",
+        # exceptions it may raise or catch
+        "Exception", "ValueError", "TypeError", "IndexError", "KeyError",
+        "ZeroDivisionError", "ArithmeticError", "RuntimeError",
+        "StopIteration", "AttributeError", "NotImplementedError",
+        "AssertionError", "OverflowError",
+    )
 }
+# Classes need this, and it is not reachable as a name.
+_ALLOWED_BUILTINS["__build_class__"] = __build_class__
+_ALLOWED_BUILTINS["__name__"] = "generated"
 
 # A generated program naturally opens with `import math`, so banning imports
 # outright rejected every good program. Allow the few that only compute.
@@ -82,8 +96,25 @@ class ProgramError(RuntimeError):
 
 
 def _strip_fences(text: str) -> str:
-    fenced = re.search(r"```(?:python)?\s*\n(.*?)```", text, re.S)
-    return (fenced.group(1) if fenced else text).strip()
+    """Pull the program out of whatever the model wrapped it in.
+
+    A fifty thousand character program is sometimes preceded by a sentence or
+    followed by a stray fence, and a single greedy regex gets that wrong in
+    both directions. So: take the fenced block when there is one, and
+    otherwise fall back to the first line that looks like code, which skips
+    any preamble without touching the body's indentation."""
+    body = text.strip()
+
+    blocks = re.findall(r"```(?:python)?[ \t]*\n(.*?)(?:```|\Z)", body, re.S)
+    if blocks:
+        # The program is the longest block — short ones are usually examples.
+        return max(blocks, key=len).strip("\n")
+
+    lines = body.splitlines()
+    for index, line in enumerate(lines):
+        if re.match(r"^(import |from |def |class |#!|# )", line):
+            return "\n".join(lines[index:]).strip("\n")
+    return body
 
 
 def _check(tree: ast.AST) -> None:
@@ -103,6 +134,20 @@ def _check(tree: ast.AST) -> None:
             raise ProgramError("the program reached for a dunder attribute")
 
 
+def _truncate_to_last_definition(source: str) -> str | None:
+    """Trim trailing lines until what remains parses."""
+    lines = source.splitlines()
+    for cut in range(len(lines) - 1, max(len(lines) - 400, 0), -1):
+        if lines[cut].startswith(("def ", "class ", "import ", "from ")):
+            candidate = "\n".join(lines[:cut])
+            try:
+                ast.parse(candidate)
+                return candidate
+            except SyntaxError:
+                continue
+    return None
+
+
 def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
     """The allowlist again, at runtime — the AST pass can be walked around."""
     root = name.split(".")[0]
@@ -116,8 +161,22 @@ def run_program(code: str, timeout: float = 20.0) -> dict:
     source = _strip_fences(code)
     try:
         tree = ast.parse(source)
-    except SyntaxError as e:
-        raise ProgramError(f"the program did not parse: {e.msg} (line {e.lineno})")
+    except SyntaxError as first:
+        # A truncated tail is the usual cause on a very long program. Dropping
+        # back to the last complete top-level definition salvages the rest
+        # rather than losing the whole rewrite.
+        salvaged = _truncate_to_last_definition(source)
+        if salvaged is None:
+            raise ProgramError(
+                f"the program did not parse: {first.msg} (line {first.lineno})")
+        try:
+            tree = ast.parse(salvaged)
+            source = salvaged
+            print(f"[procedural] salvaged a truncated program "
+                  f"({len(source)} of {len(_strip_fences(code))} chars)")
+        except SyntaxError:
+            raise ProgramError(
+                f"the program did not parse: {first.msg} (line {first.lineno})")
     _check(tree)
 
     env = {"__builtins__": dict(_ALLOWED_BUILTINS, __import__=_safe_import),

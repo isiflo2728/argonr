@@ -2,20 +2,20 @@
 //  ContentView.swift
 //  argonr
 //
-//  Created by Isidoro Flores on 10/25/26.
-//
 
 import SwiftUI
 
 struct ContentView: View {
-    @State private var app = AppModel()
+    @State private var model = WorldModel()
 
     var body: some View {
-        switch app.phase {
-        case .load:
-            LoadScreen(app: app)
-        case .viewing:
-            ViewerScreen(app: app)
+        switch model.phase {
+        case .prompt:
+            WorldPromptScreen(model: model)
+        case .building:
+            BuildingScreen(model: model)
+        case .playing:
+            WorldScreen(model: model)
         }
     }
 }
